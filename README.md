@@ -53,7 +53,7 @@ Note: `mdsim` claims it needs higher dependency versions, but downgrading `numpy
 python -m pytest
 ```
 
-### 6. Run with CondenSimAdapter command **adapter**
+### 6. Run with CondenSimAdapter command adapter
 
 ```bash
 adapter -h 
