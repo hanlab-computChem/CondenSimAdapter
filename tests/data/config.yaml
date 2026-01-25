@@ -1,0 +1,35 @@
+# CALVADOS CG Simulation Configuration - SLAB模式
+# 用于相分离模拟
+#
+# Notes:
+#   - slab_width 自动设置为 box[2] / 2（z 方向的一半）
+#   - 不需要用户输入 slab 相关参数
+
+# 系统信息
+system_name: FUS_LC
+
+# 环境参数
+box: [10.0, 10.0, 40.0]   # nm (x, y, z) - z方向更长
+temperature: 293.0        # Kelvin
+ionic: 0.15               # Molar (离子强度)
+
+# 拓扑类型: cubic | slab
+# SLAB 模式：分子初始放置在 z 方向中间一半的区域
+topol: slab
+
+# 模拟参数
+simulation:
+  steps: 100000000           # 总积分步数
+  wfreq: 50000             # 写入频率
+  platform: CUDA           # CPU | CUDA
+  verbose: true
+
+# 组件定义
+components:
+  # IDP 组件
+  - name: FUS_LC
+    type: IDP
+    nmol: 40
+    ffasta: sequences.fasta
+    charge_termini: both
+

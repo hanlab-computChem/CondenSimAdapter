@@ -1,0 +1,13 @@
+# Ignore log files
+*.log
+
+# Ignore trajectory files
+*.xtc
+*.trr
+
+
+
+# Ignore old/deprecated code directories
+CondenSimAdapter.old_code/
+CondenSimAdapter.pace_asm_top_builder/
+CondenSimAdapter.pace_top_builder/

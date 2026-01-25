@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""
+Entry point script for ms2 command.
+
+Install via: pip install -e .
+"""
+
+from multiscale2.cli import cli
+
+if __name__ == '__main__':
+    cli()
+
+
+
+
+

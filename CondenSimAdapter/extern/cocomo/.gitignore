@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ruff_cache
+dist/
+build/
+devreadme
+.venv/
+.env
+notebooks/
+.ipynb_checkpoints/
+plugins/
+.github/workflows/capppairs-wheels.yml
+src/cocomo/_plugin.py

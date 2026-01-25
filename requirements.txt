@@ -1,0 +1,64 @@
+# ===========================================
+# Multiscale² 统一依赖配置
+# ===========================================
+# 验证环境: Python 3.11 (PyTorch/DGL 使用 CPU 版本)
+# 推荐创建环境命令:
+#   conda create -n CondenSimAdapter python=3.11 -y
+#   conda activate CondenSimAdapter
+#
+# 安装 PyTorch (CPU 版本):
+#   pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cpu
+#
+# 或 CPU 版本:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# ===========================================
+
+# ---------- 核心科学计算 ----------
+numpy==1.24.0
+pandas==2.1.1
+scipy==1.13.0
+
+# ---------- 分子动力学 ----------
+# 注意: mdtraj 可能需要从 huhlim 的 fork 安装以兼容 cg2all
+# 备选安装方式: pip install git+https://github.com/huhlim/mdtraj.git
+mdtraj==1.10.0
+openmm==8.4.*
+mdanalysis==2.6.1
+
+# ---------- 生物信息学 ----------
+biopython==1.81
+localcider==0.1.21
+
+# ---------- 编译加速 ----------
+numba==0.60.0
+
+# ---------- 深度学习 (cg2all 依赖) ----------
+# 注意:
+# 1. dgl 2.x 需要 torch>=2
+# 2. dgl 需要从 DGL wheel 索引安装: pip install dgl==2.1.0 -f https://data.dgl.ai/wheels/torch-2.1/repo.html
+# 3. se3-transformer 必须从 huhlim 的 Git 仓库安装
+torch==2.1.2
+torchdata==0.7.1
+dgl==2.1.0
+e3nn==0.5.1
+se3-transformer @ git+https://github.com/huhlim/SE3Transformer.git
+ml-collections==0.1.1
+
+# ---------- 可视化与工具 ----------
+matplotlib>=3.8
+seaborn>=0.13
+tqdm>=4.66
+pyyaml>=6.0
+jinja2>=3.1
+
+# ---------- 分析工具 ----------
+statsmodels==0.14.0
+networkx>=3.0
+
+# ---------- 测试 ----------
+pytest>=8.0
+
+# ---------- 其他 ----------
+gromacswrapper>=0.9.0  # 可选，用于 GROMACS 接口
+# peptideconstructor 需要 Python >=3.10，暂时移除
+

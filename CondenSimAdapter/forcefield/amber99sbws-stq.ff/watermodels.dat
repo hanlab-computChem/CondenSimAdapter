@@ -1,0 +1,8 @@
+tip3p    TIP3P     TIP 3-point
+tip4p    TIP4P     TIP 4-point
+tip4pew  TIP4P-Ew  TIP 4-point optimized with Ewald
+tip5p    TIP5P     TIP 5-point (see http://redmine.gromacs.org/issues/1348 for issues)
+spc      SPC       simple point charge
+spce     SPC/E     extended simple point charge
+tip4p2005 TIP4P/2005 TIP 4-point optimized in 2005
+tip4p2005s TIP4P/2005s TIP 4-point optimized in 2005 and scaled protein-water interactions by x1.1, recommended
