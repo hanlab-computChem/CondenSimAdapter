@@ -11,19 +11,34 @@ conda create -n conden python=3.11 -y
 conda activate conden
 ```
 
-### 2. Run the install script
+### 2. Download and install dependency
+
+Download the zip from GitHub webpage or run:
+
+```bash
+wget https://github.com/pearlDingzhen/CondenSimAdapter/archive/refs/heads/master.zip
+```
+
+Unzip and enter the directory:
+
+```bash
+unzip CondenSimAdapter-master.zip
+cd CondenSimAdapter-master
+```
+
+Run the installation script:
 
 ```bash
 bash install.sh
 ```
 
-### 3. Install the local package
+### 3. Install CondenSimAdapter
 
 ```bash
 pip install .
 ```
 
-### 4. Only for COCOMO multidomain protein simulations
+### 4. For COCOMO multidomain protein simulations
 
 ```bash
 pip install git+https://github.com/feiglab/mdsim.git
@@ -31,6 +46,18 @@ pip install numpy==1.26.4 mdtraj==1.11.0
 ```
 
 Note: `mdsim` claims it needs higher dependency versions, but downgrading `numpy` and `mdtraj` to the versions above does not affect COCOMO simulations.
+
+### 5. Run test 
+
+```bash
+python -m pytest
+```
+
+### 6. Run with CondenSimAdapter command **adapter**
+
+```bash
+adapter -h 
+```
 
 ## Requirements
 
