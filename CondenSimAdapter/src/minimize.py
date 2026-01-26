@@ -32,12 +32,12 @@ import MDAnalysis as mda
 try:
     import openmm.unit as unit
     import openmm as mm
-    from openmm.app import GromacsGroFile, Simulation, PDBFile
+    from openmm.app import GromacsGroFile, GromacsTopFile, Simulation, PDBFile
     from openmm import Platform
 except ImportError:
     import simtk.unit as unit
     import simtk.openmm as mm
-    from simtk.openmm.app import GromacsGroFile, Simulation, PDBFile
+    from simtk.openmm.app import GromacsGroFile, GromacsTopFile, Simulation, PDBFile
     from simtk.openmm import Platform
 
 import click
@@ -377,23 +377,30 @@ class MinimizeSimulator:
             structure_dir.mkdir(exist_ok=True)
             minimize_dir.mkdir(exist_ok=True)
 
+            # Step counter for progress display
+            step_num = 0
+
             # Copy force field folder to output directory for pdb2gmx
             ff_path = get_force_field_path(self.minimize_config.forcefield_type)
             if ff_path and Path(ff_path).exists():
                 ff_folder_name = Path(ff_path).name
                 target_ff_path = output_path / ff_folder_name
                 if not target_ff_path.exists():
-                    click.echo(f"\n[0.5/4] Copying force field to output directory...")
+                    step_num += 1
+                    click.echo(f"\n[Step {step_num}] Copying force field to output directory...")
                     shutil.copytree(ff_path, target_ff_path)
                     click.echo(f"  Force field: {ff_folder_name}")
                 else:
-                    click.echo(f"\n[0.5/4] Force field already present: {ff_folder_name}")
+                    step_num += 1
+                    click.echo(f"\n[Step {step_num}] Force field already present: {ff_folder_name}")
             else:
-                click.echo(f"\n[0.5/4] Warning: Force field folder not found for '{self.minimize_config.forcefield_type}'")
+                step_num += 1
+                click.echo(f"\n[Step {step_num}] Warning: Force field folder not found for '{self.minimize_config.forcefield_type}'")
                 click.echo(f"  pdb2gmx may fail if it cannot find the force field")
 
-            # 1. Generate multi-component topology
-            click.echo(f"\n[1/4] Generating topology from components...")
+            # Step: Generate multi-component topology
+            step_num += 1
+            click.echo(f"\n[Step {step_num}] Generating topology from components...")
             if self.components:
                 total_nmol = sum(comp.nmol for comp in self.components)
                 his_repeat_count = max(total_nmol * 30, 30)
@@ -417,7 +424,8 @@ class MinimizeSimulator:
                 raise ValueError("No components configured for topology generation")
             
             # 2. Generate structure from input PDB
-            click.echo(f"\n[2/4] Generating structure from input PDB...")
+            step_num += 1
+            click.echo(f"\n[Step {step_num}] Generating structure from input PDB...")
             structure_gro = run_pdb2gmx_for_structure(
                 Path(input_pdb),
                 structure_dir,
@@ -430,7 +438,8 @@ class MinimizeSimulator:
             
             # 3. Box resize if enabled
             if self.minimize_config.box_resize_enabled:
-                click.echo(f"\n[3/4] Resizing box...")
+                step_num += 1
+                click.echo(f"\n[Step {step_num}] Resizing box...")
                 resized_pdb = self.resize_box(
                     str(structure_gro), 
                     structure_dir,
@@ -439,7 +448,8 @@ class MinimizeSimulator:
                 structure_gro = resized_pdb
             
             # 4. Run OpenMM minimization in worker process (implicit solvent)
-            click.echo(f"\n[4/5] Running implicit solvent minimization...")
+            step_num += 1
+            click.echo(f"\n[Step {step_num}] Running implicit solvent minimization...")
             try:
                 minimize_result = self.run_openmm_minimization(
                     str(structure_gro),
@@ -464,7 +474,8 @@ class MinimizeSimulator:
                     result.total_steps = minimize_result['total_steps']
                 
                 # Generate plumed.dat for MDP components
-                click.echo(f"\n[Post-processing] Checking for MDP components...")
+                step_num += 1
+                click.echo(f"\n[Step {step_num}] Checking for MDP components and generating plumed.dat...")
                 from .plumed_generator import generate_plumed_for_minimize
                 
                 try:
@@ -491,7 +502,8 @@ class MinimizeSimulator:
             
             # 5. Solvate if enabled
             if self.minimize_config.solvate_enabled:
-                click.echo(f"\n[5/5] Explicit solvation...")
+                step_num += 1
+                click.echo(f"\n[Step {step_num}] Explicit solvation...")
                 solvate_dir = output_path / "solvate"
                 solvate_dir.mkdir(exist_ok=True)
                 
@@ -513,7 +525,38 @@ class MinimizeSimulator:
                 click.echo(f"  Final structure (solvated): {final_gro_solvated.name}")
                 click.echo(f"  Final topology: {final_top_output.name}")
                 
-                result.output_pdb = str(final_gro_solvated)
+                # Build OpenMM system from solvated structure and save PDB
+                step_num += 1
+                click.echo(f"\n[Step {step_num}] Add chain label for structure for better visualization...")
+                final_pdb_solvated = output_path / "minimize_final_solvated.pdb"
+                
+                # Use OpenMM to read GRO and TOP, build system, and save PDB
+                # Force field files are already copied to output directory
+                gro_file = GromacsGroFile(solvated_gro)
+                top_file = GromacsTopFile(
+                    solvated_top,
+                    periodicBoxVectors=gro_file.getPeriodicBoxVectors(),
+                    includeDir=str(output_path)  # Force field files are in output directory
+                )
+                # Build system (we don't need the system object for anything,
+                # just need to validate topology)
+                _ = top_file.createSystem(
+                    nonbondedMethod=mm.app.PME,
+                    nonbondedCutoff=1*unit.nanometer,
+                    constraints=mm.app.HBonds
+                )
+                
+                # Save coordinates to PDB
+                with open(final_pdb_solvated, 'w') as f:
+                    PDBFile.writeFile(
+                        top_file.topology,
+                        gro_file.getPositions(asNumpy=True),
+                        f
+                    )
+                
+                click.echo(f"  Final structure (PDB): {final_pdb_solvated.name}")
+                
+                result.output_pdb = str(final_pdb_solvated)
                 result.intermediate_files = minimize_result.get('intermediate_files', [])
             else:
                 result.output_pdb = str(final_pdb)
