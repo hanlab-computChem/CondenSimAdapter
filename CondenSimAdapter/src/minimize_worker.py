@@ -198,43 +198,59 @@ def run_minimization(
             PDBFile.writeFile(top.topology, current_positions, open(output_file, 'w'))
             print(f"  Generated {output_file} (lambda={lambda_val})")
             
-            # Clean up
-            del system_softcore, simulation, state_softcore
-            gc.collect()
-        
-        # ===== Step 3: Standard with Implicit Solvent =====
-        gb_constant = IMPLICIT_GBN2 if gb_model.upper() == 'GBN2' else IMPLICIT_OBC2
-        
-        system_standard = top.createSystem(
-            nonbondedCutoff=cutoff * unit.nanometer,
-            nonbondedMethod=ff.CutoffPeriodic,
-            nonbonded_type=NONBONDED_STANDARD,
-            add_implicit_solvent=True,
-            gb_model=gb_constant,
-            salt_conc=salt_conc
-        )
-        
+        # Clean up
+        del system_softcore, simulation, state_softcore
+        gc.collect()
+
+        # ===== Step 3: Final Minimization =====
+        # For CHARMM: use softcore with lambda=0.99999 (bypasses GB issues)
+        # For AMBER: use standard with implicit solvent
+        if ff_type.upper() == 'CHARMM':
+            # CHARMM: use softcore with very high lambda
+            final_lambda = 0.99999
+            print(f"  Using softcore final minimize (lambda={final_lambda}) for CHARMM")
+
+            system_final = top.createSystem(
+                nonbondedCutoff=cutoff * unit.nanometer,
+                nonbondedMethod=ff.CutoffPeriodic,
+                nonbonded_type=NONBONDED_SOFTCORE,
+                add_implicit_solvent=False,
+                soft_lambda=final_lambda
+            )
+        else:
+            # AMBER: use standard with implicit solvent
+            gb_constant = IMPLICIT_GBN2 if gb_model.upper() == 'GBN2' else IMPLICIT_OBC2
+
+            system_final = top.createSystem(
+                nonbondedCutoff=cutoff * unit.nanometer,
+                nonbondedMethod=ff.CutoffPeriodic,
+                nonbonded_type=NONBONDED_STANDARD,
+                add_implicit_solvent=True,
+                gb_model=gb_constant,
+                salt_conc=salt_conc
+            )
+
         integrator = LangevinIntegrator(
             300 * unit.kelvin,
             1.0 / unit.picosecond,
             0.002 * unit.picosecond
         )
         integrator.setRandomNumberSeed(0)
-        
-        simulation = Simulation(top.topology, system_standard, integrator, platform, properties)
+
+        simulation = Simulation(top.topology, system_final, integrator, platform, properties)
         simulation.context.setPositions(current_positions)
         simulation.context.setPeriodicBoxVectors(*box_vectors)
-        
+
         simulation.minimizeEnergy(maxIterations=max_iterations, tolerance=tolerance)
-        
+
         state_final = simulation.context.getState(getEnergy=True, getPositions=True, enforcePeriodicBox=True)
-        
+
         # Save final output
         PDBFile.writeFile(top.topology, state_final.getPositions(), open('minimize_final.pdb', 'w'))
         print(f"  Generated minimize_final.pdb")
-        
+
         # Clean up
-        del system_standard, simulation, state_final
+        del system_final, simulation, state_final
         gc.collect()
         
         # Calculate total optimization steps

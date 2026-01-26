@@ -1069,9 +1069,9 @@ class GromacsTopFileWithSoftcore(object):
                 # No NonbondedForce needed - softcore CustomNonbondedForce handles everything
                 nb = None
                 lj = None
-                
-                # Add GBSA implicit solvent if requested
-                if add_implicit_solvent:
+
+                # Add GBSA implicit solvent if requested (skip for CHARMM)
+                if add_implicit_solvent and self._forcefield_type.upper() != 'CHARMM':
                     _add_gbsa_solvent(sys, self, gb_model, salt_conc, nonbondedCutoff, self._forcefield_type)
             elif nonbonded_type == NONBONDED_STANDARD_CUSTOM:
                 # Standard LJ+Coulomb using CustomNonbondedForce (for debugging/comparison)
@@ -1088,9 +1088,9 @@ class GromacsTopFileWithSoftcore(object):
                 # No NonbondedForce needed
                 nb = None
                 lj = None
-                
-                # Add GBSA implicit solvent if requested
-                if add_implicit_solvent:
+
+                # Add GBSA implicit solvent if requested (skip for CHARMM)
+                if add_implicit_solvent and self._forcefield_type.upper() != 'CHARMM':
                     _add_gbsa_solvent(sys, self, gb_model, salt_conc, nonbondedCutoff, self._forcefield_type)
             elif nonbonded_type == NONBONDED_STANDARD and add_implicit_solvent:
                 # Stage 3: Standard potential with implicit solvent
@@ -1114,8 +1114,9 @@ class GromacsTopFileWithSoftcore(object):
                     lj.addPerParticleParameter('A')
                     sys.addForce(lj)
 
-                # Add GBn2 implicit solvent
-                _add_gbsa_solvent(sys, self, gb_model, salt_conc, nonbondedCutoff, self._forcefield_type)
+                # Add GBn2 implicit solvent (skip for CHARMM)
+                if self._forcefield_type.upper() != 'CHARMM':
+                    _add_gbsa_solvent(sys, self, gb_model, salt_conc, nonbondedCutoff, self._forcefield_type)
             else:
                 # Fallback (shouldn't happen)
                 raise ValueError(f"Invalid combination: nonbonded_type='{nonbonded_type}', add_implicit_solvent={add_implicit_solvent}")
@@ -2083,7 +2084,7 @@ def _add_gbsa_solvent(sys, top, gb_model='GBn2', salt_conc=0.0, nonbondedCutoff=
     top : GromacsTopFileWithSoftcore
         Topology object with _molecules and _moleculeTypes attributes
     gb_model : str='GBn2'
-        GBSA model: 'OBC1', 'OBC2', 'GBn', 'GBn2'
+        GBSA model: 'OBC2' or 'GBn2'
     salt_conc : float=0.0
         Salt concentration (M), for Debye-Hückel screening
     nonbondedCutoff : Quantity=None
@@ -2105,9 +2106,9 @@ def _add_gbsa_solvent(sys, top, gb_model='GBn2', salt_conc=0.0, nonbondedCutoff=
         atom_mapping = CHARMM36_ATOM_MAPPING
 
     # Validate gb_model
-    if gb_model not in ['OBC1', 'OBC2', 'GBn', 'GBn2']:
+    if gb_model not in ['OBC2', 'GBn2']:
         raise ValueError(f"Unsupported GB model: {gb_model}. "
-                       f"Supported models: OBC1, OBC2, GBn, GBn2")
+                       f"Supported models: OBC2, GBn2")
 
     # Set dielectric constants
     solute_dielectric = 1.0
@@ -2132,7 +2133,7 @@ def _add_gbsa_solvent(sys, top, gb_model='GBn2', salt_conc=0.0, nonbondedCutoff=
         kappa *= 7.3
 
     # Create the appropriate GB force
-    if gb_model in ['OBC1', 'OBC2']:
+    if gb_model == 'OBC2':
         # Use native GBSAOBCForce
         gb_force = mm.GBSAOBCForce()
         gb_force.setSurfaceAreaEnergy(0.0)  # No SASA contribution
@@ -2150,25 +2151,18 @@ def _add_gbsa_solvent(sys, top, gb_model='GBn2', salt_conc=0.0, nonbondedCutoff=
         if kappa > 0 and hasattr(gb_force, 'setKappa'):
             gb_force.setKappa(kappa)
 
-    elif gb_model in ['GBn', 'GBn2']:
-        # Use custom GBn/GBn2 forces from OpenMM internal
-        if gb_model == 'GBn2':
-            gb_force = GBSAGBn2Force(
-                solventDielectric=solvent_dielectric,
-                soluteDielectric=solute_dielectric,
-                SA=None,  # No surface area contribution
-                cutoff=cutoff,
-                kappa=kappa
-            )
-            # Explicitly set CutoffPeriodic to match NonbondedForce
-            gb_force.setNonbondedMethod(GBSAGBn2Force.CutoffPeriodic)
-            gb_force.setCutoffDistance(cutoff)
-        else:
-            # GBn would need GBSAGBnForce (not imported, so raise error for now)
-            raise NotImplementedError(
-                f"GB model '{gb_model}' is not yet implemented. "
-                f"Only OBC1, OBC2, and GBn2 are currently supported."
-            )
+    elif gb_model == 'GBn2':
+        # Use custom GBn2 force from OpenMM internal
+        gb_force = GBSAGBn2Force(
+            solventDielectric=solvent_dielectric,
+            soluteDielectric=solute_dielectric,
+            SA=None,  # No surface area contribution
+            cutoff=cutoff,
+            kappa=kappa
+        )
+        # Explicitly set CutoffPeriodic to match NonbondedForce
+        gb_force.setNonbondedMethod(GBSAGBn2Force.CutoffPeriodic)
+        gb_force.setCutoffDistance(cutoff)
 
     # Get charges from the topology
     # Build a list of charges from the atom information
@@ -2185,49 +2179,33 @@ def _add_gbsa_solvent(sys, top, gb_model='GBn2', salt_conc=0.0, nonbondedCutoff=
                 charges.append(charge)
 
     # Add particles to the GB force
-    if gb_model in ['OBC1', 'OBC2']:
-        # For OBC1/OBC2, get radii and screening factors
-        if gb_model == 'OBC2':
-            # Use getStandardParameters from GBSAOBC2Force equivalent
-            gb_parms = GBSAGBn2Force.getStandardParameters(top.topology)
-            # Use selected atom mapping for screening factors based on forcefield type
-            screen_factors = []
-            for atom in top.topology.atoms():
-                atom_type = atom.name
-                if atom_type in atom_mapping:
-                    screen = atom_mapping[atom_type]['screen']
-                elif atom.element and atom.element.symbol in ['H', 'C', 'N', 'O', 'S', 'P']:
-                    # Fallback to element-based defaults
-                    element_screen = {
-                        'H': 0.85, 'C': 0.72, 'N': 0.79, 'O': 0.85, 'S': 0.96, 'P': 0.86
-                    }
-                    screen = element_screen.get(atom.element.symbol, 0.8)
-                else:
-                    screen = 0.8
-                screen_factors.append(screen)
+    if gb_model == 'OBC2':
+        # Use atom_mapping for both radius and screening factors
+        for i, atom in enumerate(top.topology.atoms()):
+            if i < len(charges):
+                charge = charges[i]
+            else:
+                charge = 0.0
 
-            # Add particles: (charge, radius, screening)
-            for i, atom in enumerate(top.topology.atoms()):
-                if i < len(charges) and i < len(gb_parms):
-                    charge = charges[i]
-                    # Use radius from GB parameters (in nm) or default
-                    if i < len(gb_parms):
-                        radius = gb_parms[i][0]
-                    else:
-                        radius = 0.170  # Default radius
-                    screening = screen_factors[i] if i < len(screen_factors) else 0.8
-                    gb_force.addParticle(charge, radius, screening)
-        else:
-            # OBC1 - similar to OBC2 but with different parameters
-            for i, atom in enumerate(top.topology.atoms()):
-                if i < len(charges):
-                    charge = charges[i]
-                else:
-                    charge = 0.0
-                # Use default radius and screening
-                radius = 0.170
-                screening = 0.8
-                gb_force.addParticle(charge, radius, screening)
+            # Get atom type and look up in mapping
+            atom_type = atom.name
+            if atom_type in atom_mapping:
+                atom_info = atom_mapping[atom_type]
+                radius = atom_info['radius']
+                screening = atom_info.get('screen', 0.8)
+            elif atom.element and atom.element.symbol in ['H', 'C', 'N', 'O', 'S', 'P']:
+                # Fallback to element-based defaults
+                element_defaults = {
+                    'H': (0.100, 0.85), 'C': (0.170, 0.72),
+                    'N': (0.155, 0.79), 'O': (0.150, 0.85),
+                    'S': (0.180, 0.96), 'P': (0.185, 0.86)
+                }
+                defaults = element_defaults.get(atom.element.symbol, (0.170, 0.8))
+                radius, screening = defaults
+            else:
+                radius, screening = 0.170, 0.8
+
+            gb_force.addParticle(charge, radius, screening)
 
     elif gb_model == 'GBn2':
         # For GBn2, get parameters from getStandardParameters
@@ -2256,7 +2234,7 @@ def _add_gbsa_solvent(sys, top, gb_model='GBn2', salt_conc=0.0, nonbondedCutoff=
                 gb_force.addParticle([0.0, 0.19, 0.8, 1.0, 1.0, 1.0])
 
     # Finalize and add to system
-    if hasattr(gb_force, 'finalize') and gb_model not in ['OBC2']:
+    if hasattr(gb_force, 'finalize') and gb_model == 'GBn2':
         gb_force.finalize()
 
     sys.addForce(gb_force)
