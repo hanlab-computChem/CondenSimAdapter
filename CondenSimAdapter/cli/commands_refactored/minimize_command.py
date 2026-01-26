@@ -6,6 +6,7 @@ Energy minimization using AMBER/CHARMM force fields.
 """
 
 import sys
+from pathlib import Path
 
 import click
 from click_option_group import optgroup
@@ -21,16 +22,18 @@ def _print_help(ctx, param, value):
 @click.command('minimize', context_settings={'help_option_names': []})
 @optgroup.group('CORE INPUTS')
 @optgroup.option(
-    '--input', '-i',
-    type=click.Path(exists=True),
-    required=True,
-    help='Input: backmap output directory (adapter backmap) or PDB file (user provided)',
-)
-@optgroup.option(
     '--input-file', '-f',
     type=click.Path(exists=True),
     required=True,
     help='Configuration YAML (same as CG stage, same flag as adapter cg)',
+)
+@optgroup.option(
+    '--input', '-i',
+    type=click.Path(),
+    required=False,
+    default=None,
+    help='Input: backmap output directory (adapter backmap) or PDB file (user provided). '
+         'Default: {system_name}_backmap',
 )
 @optgroup.group('Simulation settings')
 @optgroup.option(
@@ -180,6 +183,7 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
         adapter minimize -i TDP43_backmap -f config.yaml --solvate --salt-conc 0.2
     """
     from ...src.minimize import MinimizeSimulator, MinimizeConfig
+    from ...src.pdb2gmx_utils import load_config_from_yaml
     from ..shared import validate_minimize_force_field, REGISTRY
 
     # Set the callback for force field validation
@@ -187,6 +191,16 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
         if param.name == 'force_field':
             param.callback = validate_minimize_force_field
             break
+
+    if input is None:
+        system_name, _ = load_config_from_yaml(input_file)
+        input = f"{system_name}_backmap"
+
+    if not Path(input).exists():
+        raise click.BadParameter(
+            f'Input path "{input}" does not exist. '
+            f'Provide --input or ensure the default "{input}" exists.'
+        )
 
     click.echo(f"\n{'=' * 60}")
     click.echo(f"Energy Minimization (AMBER/CHARMM)")

@@ -168,13 +168,20 @@ def run_minimization(
         
         # ===== Step 2: Softcore Optimization with Lambda =====
         lambda_values = get_lambda_values(optimization_level)
-        
+        gb_constant = IMPLICIT_GBN2 if gb_model.upper() == 'GBN2' else IMPLICIT_OBC2
+
         for step_num, lambda_val in enumerate(lambda_values, 1):
+            # For AMBER: add implicit solvent; for CHARMM: skip (avoid GB issues)
+            add_implicit = ff_type.upper() == 'AMBER'
+            gb_model_for_softcore = gb_constant if add_implicit else None
+
             system_softcore = top.createSystem(
                 nonbondedCutoff=cutoff * unit.nanometer,
                 nonbondedMethod=ff.CutoffPeriodic,
                 nonbonded_type=NONBONDED_SOFTCORE,
-                add_implicit_solvent=False,
+                add_implicit_solvent=add_implicit,
+                gb_model=gb_model_for_softcore,
+                salt_conc=salt_conc,
                 soft_lambda=lambda_val
             )
             
