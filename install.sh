@@ -138,7 +138,7 @@ echo "[6/6] Installing mdtraj..."
 pip install mdtraj==1.10.0
 pip install pytest
 pip install PeptideConstructor
-
+pip install click_option_group
 
 echo ""
 echo "==========================================="

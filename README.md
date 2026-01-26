@@ -38,7 +38,7 @@ bash install.sh
 pip install .
 ```
 
-### 4. For COCOMO multidomain protein simulations
+### 4. For COCOMO multidomain protein simulations (Optional)
 
 ```bash
 pip install git+https://github.com/feiglab/mdsim.git
