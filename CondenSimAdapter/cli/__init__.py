@@ -8,7 +8,7 @@ A workflow for CG and AA protein condensate simulation.
         cg               Run coarse-grained simulation
         backmap          Backmap CG structure to all-atom representation
         minimize         Energy minimization with AMBER/CHARMM force fields
-    
+
     Utility Commands:
         init             Initialize a new configuration template
         droplet-density  Estimate protein density in droplet geometry
@@ -17,10 +17,63 @@ A workflow for CG and AA protein condensate simulation.
 
 import sys
 import warnings
-import click
+import os
 
-# Filter out OpenMM deprecation warnings
-warnings.filterwarnings('ignore', message='.*simtk.openmm.*deprecated.*')
+# CRITICAL: Set up warning filters BEFORE any other imports
+# This must be done at the very beginning to catch warnings from all modules
+
+# Suppress all deprecation warnings globally
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+# Suppress specific warnings from common simulation libraries
+warnings.filterwarnings('ignore', message='.*simtk\\.openmm.*')
+warnings.filterwarnings('ignore', message='.*xdrlib.*')
+warnings.filterwarnings('ignore', message='.*MDAnalysis.*')
+warnings.filterwarnings('ignore', message='.*Bio\\..*')
+warnings.filterwarnings('ignore', message='.*NumPy.*')
+warnings.filterwarnings('ignore', message='.*Pandas.*')
+
+# Suppress UserWarnings and FutureWarnings
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=RuntimeWarning)
+
+# Also redirect stderr for any warnings that bypass the warning module
+_stderr_fileno = None
+try:
+    _stderr_fileno = sys.stderr.fileno()
+except (AttributeError, ValueError):
+    pass
+
+# Create a filter function for stderr
+class StderrWarningFilter:
+    """Filter out warning messages from stderr."""
+
+    def __init__(self):
+        self.original_stderr = sys.stderr
+
+    def write(self, text):
+        # Skip warning messages
+        if 'Warning:' in text or 'warning:' in text.lower():
+            return
+        if 'deprecated' in text.lower():
+            return
+        self.original_stderr.write(text)
+
+    def flush(self):
+        self.original_stderr.flush()
+
+    def fileno(self):
+        return self.original_stderr.fileno()
+
+    def isatty(self):
+        return self.original_stderr.isatty()
+
+# Only replace stderr if we're in a non-TTY context (to avoid issues in some environments)
+if _stderr_fileno is not None and not os.environ.get('FORCE_ADAPTER_STDERR', ''):
+    pass  # Keep original stderr in normal use
+
+import click
 
 from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command
 
