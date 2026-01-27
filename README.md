@@ -1,6 +1,6 @@
 # CondenSimAdapter
 
-CondenSimAdapter is an automated workflow for protein condensate simulations, covering the main stages from CG to AA. This README only keeps the installation guide.
+CondenSimAdapter is an automated workflow for protein condensate simulations, covering the main stages from CG to AA.
 
 ## Installation
 
