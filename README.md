@@ -16,7 +16,7 @@ conda activate conden
 Download the zip from GitHub webpage or run:
 
 ```bash
-wget https://github.com/pearlDingzhen/CondenSimAdapter/archive/refs/heads/master.zip
+wget https://github.com/hanlab-computChem/CondenSimAdapter/archive/refs/heads/main.zip
 ```
 
 Unzip and enter the directory:
@@ -63,4 +63,5 @@ adapter -h
 
 - Python = 3.11
 - CUDA >= 12.1
+
 - GROMACS >= 2023 (install it yourself)
