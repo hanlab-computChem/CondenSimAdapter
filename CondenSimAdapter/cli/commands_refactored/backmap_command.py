@@ -14,8 +14,9 @@ import click
 @click.option(
     '--input', '-i',
     type=click.Path(exists=True),
-    required=True,
-    help='Input: CG output directory (adapter cg) or PDB file (user provided)',
+    required=False,
+    default=None,
+    help='Input: CG output directory (default: {system_name}_cg) or PDB file (user provided)',
 )
 @click.option(
     '--input-file', '-f',
@@ -33,23 +34,54 @@ import click
     help='CG model type (overrides config, default: auto-detect)',
 )
 def backmap_command(input, input_file, output, model_type):
-    """Backmap CG structure to all-atom representation.
-    
+    """\b
+    Backmap CG structure to all-atom representation.
+
+    \b
     Uses the same config.yaml as CG stage, with optional backmap section.
-    
+
+    \b
     Examples:
-        # adapter cg output (with explicit config.yaml)
-        adapter backmap -i TDP43_CG -f config.yaml
-        
-        # adapter cg output (auto-find config.yaml in pwd)
-        adapter backmap -i TDP43_CG
-        
-        # user provided PDB (requires config.yaml)
-        adapter backmap -i my_structure.pdb -f config.yaml
-        
-        # Custom output
-        adapter backmap -i TDP43_CG -f config.yaml -o ./results
+        adapter backmap -f config.yaml                  # Auto-find {system_name}_cg
+        adapter backmap -i TDP43_CG -f config.yaml      # With explicit CG directory
+        adapter backmap -i my_structure.pdb -f config.yaml  # User provided PDB
+        adapter backmap -i TDP43_CG -f config.yaml -o ./results  # Custom output
     """
+    from ...src.backmap import BackmapSimulator, BackmapConfig
+    from ...src import CGSimulationConfig
+    from ...src.pdb2gmx_utils import load_config_from_yaml
+    
+    # If input_file is not provided, try to find config.yaml in current directory
+    if input_file is None:
+        import os
+        if os.path.exists('config.yaml'):
+            input_file = 'config.yaml'
+        elif os.path.exists('system.yaml'):
+            input_file = 'system.yaml'
+    
+    if input_file is None:
+        click.echo(f"Error: No configuration file found. Please provide -f config.yaml", err=True)
+        sys.exit(1)
+    
+    # Load system_name from config to determine default input/output paths
+    try:
+        system_name, _ = load_config_from_yaml(input_file)
+    except Exception as e:
+        click.echo(f"Error: Failed to load configuration file: {e}", err=True)
+        sys.exit(1)
+    
+    # If input is not provided, default to {system_name}_cg
+    if input is None:
+        input = f"{system_name}_cg"
+    
+    if not Path(input).exists():
+        click.echo(f"Error: Input path '{input}' does not exist.", err=True)
+        click.echo(f"  Provide -i flag or ensure '{input}' directory exists.", err=True)
+        sys.exit(1)
+    
+    # If output is not provided, default to {system_name}_backmap
+    if output is None:
+        output = f"{system_name}_backmap"
     from ...src.backmap import BackmapSimulator, BackmapConfig
     from ...src import CGSimulationConfig
     

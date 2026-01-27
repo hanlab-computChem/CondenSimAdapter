@@ -41,19 +41,23 @@ from ...src import CGSimulationConfig
 )
 @click.argument('extra_nmol', nargs=-1, type=str, required=False)
 def droplet_density_command(input_file: str, radius: float, nmol: str, verbose: bool, extra_nmol: tuple):
-    """
+    """\b
     Estimate protein density in a droplet geometry.
 
+    \b
     Calculates the protein concentration (mg/mL) based on:
-    - Configuration YAML (components, sequences, residue counts)
-    - Provided droplet radius
-    - Optional: number of molecules per component (-n flag)
+        - Configuration YAML (components, sequences, residue counts)
+        - Provided droplet radius
+        - Optional: number of molecules per component (-n flag)
 
+    \b
     Use -n to specify molecule counts and calculate achievable density.
     Example: adapter droplet-density -f config.yaml -r 15 -n 100 200
 
+    \b
     Warnings are issued if density is below 300 mg/mL or above 800 mg/mL.
 
+    \b
     Examples:
         adapter droplet-density -f config.yaml -r 15
         adapter droplet-density -f config.yaml -r 20 -n 10 20

@@ -77,11 +77,13 @@ def cg_command(
     gpu_id: int,
     continue_from: str,
 ):
-    """
+    """\b
     Run coarse-grained simulation.
-    
-    INPUT_FILE is the configuration YAML file.
-    
+
+    \b
+    INPUT_FILE: Configuration YAML file (same as adapter init output).
+
+    \b
     Examples:
         adapter cg -f config.yaml                 # Run with calvados (GPU 0)
         adapter cg -f config.yaml -g 1            # Run on GPU 1

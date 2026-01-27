@@ -133,15 +133,17 @@ def _print_help(ctx, param, value):
     help='Show this message and exit.',
 )
 def minimize_command(input, input_file, output, force_field, device, gpu_id, level, tolerance, iter, salt_conc, cutoff, solvate, no_disulfide, his_type):
-    """Energy minimization using AMBER/CHARMM force fields.
+    """\b
+    Energy minimization using AMBER/CHARMM force fields.
 
     \b
     Workflow:
-    1. Implicit solvent optimization (OBC2 model) → minimize_final.pdb
-    2. (Optional) If --solvate enabled:
-       - Add water box and ions to minimize_final.pdb
-       - Output: minimize_final_solvated.gro + topol.top
+        1. Implicit solvent optimization (OBC2 model) -> minimize_final.pdb
+        2. (Optional) If --solvate enabled:
+           - Add water box and ions to minimize_final.pdb
+           - Output: minimize_final_solvated.gro + topol.top
 
+    \b
     Uses gromacs pdb2gmx for topology generation and multi-step OpenMM
     minimization (Gaussian -> Softcore -> Standard) with OBC2 implicit solvent.
 
@@ -159,27 +161,19 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
 
     \b
     Optimization levels:
-        high:   4 steps (lambda: 0.65 → 0.75 → 0.85 → 0.95)
-        medium: 3 steps (lambda: 0.75 → 0.85 → 0.95) - default
-        low:    2 steps (lambda: 0.85 → 0.95)
+        high:   4 steps (lambda: 0.65 -> 0.75 -> 0.85 -> 0.95)
+        medium: 3 steps (lambda: 0.75 -> 0.85 -> 0.95) - default
+        low:    2 steps (lambda: 0.85 -> 0.95)
 
     \b
     Examples:
-        # From adapter backmap output (using a99SBdisp with GBn2)
-        adapter minimize -i TDP43_backmap -f config.yaml
-        # From user provided PDB
-        adapter minimize -i my_structure.pdb -f config.yaml
-        # With CHARMM36 force field
-        adapter minimize -i TDP43_backmap -f config.yaml --force-field 9
-        # Use faster optimization (low mode)
-        adapter minimize -i TDP43_backmap -f config.yaml --level low
-        # Use CPU instead of CUDA
-        adapter minimize -i TDP43_backmap -f config.yaml -d cpu
-        # Use specific GPU (GPU 1)
-        adapter minimize -i TDP43_backmap -f config.yaml --gpu-id 1
-        # With explicit solvation (water box + ions)
-        adapter minimize -i TDP43_backmap -f config.yaml --solvate
-        # With explicit solvation and custom salt concentration
+        adapter minimize -i TDP43_backmap -f config.yaml  # From backmap output
+        adapter minimize -i my_structure.pdb -f config.yaml  # From user PDB
+        adapter minimize -i TDP43_backmap -f config.yaml --force-field 9  # CHARMM36
+        adapter minimize -i TDP43_backmap -f config.yaml --level low  # Fast mode
+        adapter minimize -i TDP43_backmap -f config.yaml -d cpu  # Use CPU
+        adapter minimize -i TDP43_backmap -f config.yaml --gpu-id 1  # GPU 1
+        adapter minimize -i TDP43_backmap -f config.yaml --solvate  # Explicit water
         adapter minimize -i TDP43_backmap -f config.yaml --solvate --salt-conc 0.2
     """
     from ...src.minimize import MinimizeSimulator, MinimizeConfig

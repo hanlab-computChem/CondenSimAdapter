@@ -86,20 +86,22 @@ from ..shared import (
 def init_command(name: str, ff: str, type: str, topol: str, output: str, nmol: int, 
                  time: float, components: Optional[str], box: Optional[tuple], 
                  temperature: float, ionic: float):
-    """
+    """\b
     Initialize a new CG simulation configuration template.
-    
-    NAME is the system name (optional, defaults to 'my_simulation').
-    
+
+    \b
+    NAME: System name (optional, defaults to 'my_simulation').
+
+    \b
     Examples:
-        adapter init                           # Grid geometry, 1000ns
-        adapter init my_project                # Custom name
-        adapter init --topol slab              # Slab geometry with default box [10, 10, 40]
-        adapter init --topol slab -b 10 10 40  # Slab with custom box
-        adapter init --topol droplet -b 15 15 15  # Droplet with radius 15 nm
-        adapter init -c IIIMII --nmol 10       # 3 IDP + 1 MDP + 2 IDP
-        adapter init --time 5000               # 5000 ns simulation
-        adapter init --temperature 293 --ionic 0.2  # Custom parameters
+        adapter init                                    # Grid geometry, 1000ns
+        adapter init my_project                         # Custom name
+        adapter init --topol slab                       # Slab geometry [10, 10, 40]
+        adapter init --topol slab -b 10 10 40           # Slab with custom box
+        adapter init --topol droplet -b 15 15 15        # Droplet with radius 15 nm
+        adapter init -c IIIMII --nmol 10                # 3 IDP + 1 MDP + 2 IDP
+        adapter init --time 5000                        # 5000 ns simulation
+        adapter init --temperature 293 --ionic 0.2      # Custom parameters
     """
     # Set default name if not provided
     if not name:
