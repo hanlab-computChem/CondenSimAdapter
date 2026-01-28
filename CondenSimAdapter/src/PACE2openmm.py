@@ -1428,26 +1428,26 @@ class PACETopFile(object):
             rcut_val = nonbonded_cutoff.value_in_unit(unit.nanometers)
             epsilon_r_val = self.epsilon_r
             self.nb_force = mm.CustomNonbondedForce(
-                # 1. 主公式 (包含所有分量)
-                "step(rcut - r) * (LJ_soft - corrLJ + ES_soft);"
+        # 1. Main formula (includes all components)
+        "step(rcut - r) * (LJ_soft - corrLJ + ES_soft);"
 
-                # 2. 静电项 (依赖 crf 和 inv_r_soft)
-                "ES_soft = f * q1 * q2 / epsilon_r * (inv_r_soft + (1 / (2 * rcut^3)) * r^2 - crf);"
-                "crf = 1 / rcut + (1 / (2 * rcut^3)) * rcut^2;"
-                "inv_r_soft = 1 / sqrt(r^2 + soft_alpha_coul);"
+        # 2. Electrostatic term (depends on crf and inv_r_soft)
+        "ES_soft = f * q1 * q2 / epsilon_r * (inv_r_soft + (1 / (2 * rcut^3)) * r^2 - crf);"
+        "crf = 1 / rcut + (1 / (2 * rcut^3)) * rcut^2;"
+        "inv_r_soft = 1 / sqrt(r^2 + soft_alpha_coul);"
 
-                # 3. LJ项 (依赖 reff_sq, reff, corrLJ)
-                "LJ_soft = (C12(type1, type2) / reff_sq) - (C6(type1, type2) / reff);"
-                "corrLJ = step(r - rswitch) * (C12(type1, type2)/r^12 - C6(type1, type2)/r^6) * switching_func;"
-                "switching_func = (10 * x_val^3 - 15 * x_val^4 + 6 * x_val^5);"
-                "x_val = (r - rswitch) / (rcut - rswitch);"
+        # 3. LJ term (depends on reff_sq, reff, corrLJ)
+        "LJ_soft = (C12(type1, type2) / reff_sq) - (C6(type1, type2) / reff);"
+        "corrLJ = step(r - rswitch) * (C12(type1, type2)/r^12 - C6(type1, type2)/r^6) * switching_func;"
+        "switching_func = (10 * x_val^3 - 15 * x_val^4 + 6 * x_val^5);"
+        "x_val = (r - rswitch) / (rcut - rswitch);"
 
-                # 4. 软核中间变量 (依赖 sigma6_proxy)
-                "reff_sq = reff * reff;"
-                "reff = r^6 + soft_alpha * sigma6_proxy;"
-                "sigma6_proxy = select(step(1e-8 - abs(C6(type1, type2))), 1.0, C12(type1, type2) / C6(type1, type2));"
+        # 4. Softcore intermediate variables (depends on sigma6_proxy)
+        "reff_sq = reff * reff;"
+        "reff = r^6 + soft_alpha * sigma6_proxy;"
+        "sigma6_proxy = select(step(1e-8 - abs(C6(type1, type2))), 1.0, C12(type1, type2) / C6(type1, type2));"
 
-                # 5. 常数
+        # 5. Constants
                 "f = 138.935458;"
                 "rswitch = 0.9;"
                 f"epsilon_r = {epsilon_r_val};"

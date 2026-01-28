@@ -205,14 +205,14 @@ def cg_command(
         click.echo(f"\n[4/4] Dry run - generating configuration files...")
 
         if force_field == 'calvados':
-            # 使用 CGSimulator 的目录逻辑生成配置
+            # Use CGSimulator's directory logic to generate config
             try:
                 from ...src.calvados_wrapper import CalvadosWrapper
 
-                # 准备 raw 目录（与 run_calvados 相同的目录结构）
+                # Prepare raw directory (same directory structure as run_calvados)
                 raw_dir = os.path.join(final_output_dir, 'raw')
 
-                # 写入配置文件到 raw 目录
+                # Write config files to raw directory
                 wrapper = CalvadosWrapper(config)
                 wrapper._write_to_dir(raw_dir)
 
@@ -228,7 +228,7 @@ def cg_command(
                     traceback.print_exc()
                 sys.exit(1)
         else:
-            # 其他力场：先说明需要用 CALVADOS 生成结构
+            # Other force fields: first explain that CALVADOS needs to generate structure
             click.echo(f"  Force field: {force_field}")
             click.echo(f"\n  For non-CALVADOS force fields:")
             click.echo(f"    1. CALVADOS will first generate initial structure")

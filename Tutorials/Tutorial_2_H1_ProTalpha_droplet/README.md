@@ -1,12 +1,251 @@
-教程2 
+# Tutorial 2: H1 + ProTα Droplet System
 
-教程2我们做H1 ProTalpha体系
+This tutorial demonstrates how to use `CondenSimAdapter` to rapidly construct a phase separation system with **Histone H1** and **Prothymosin-α (ProTα)** — a classic biomolecular condensate model.
 
-在这里，最主要的要点是：
+## Background
 
-1. 使用CondenSimAdapter构建多组分体系 
-2. MDP类:有结构域的单体的构建
+- **`Histone H1`** (Linker Histone): A highly positively charged protein that binds to nucleosomes, facilitating chromatin folding and compaction. It plays a key role in maintaining genomic structure.
 
-$mkdir run 
-$cd run 
+- **`Prothymosin-α (ProTα)`**: A highly negatively charged intrinsically disordered protein (IDP). As a nuclear chaperone, it binds to H1 via electrostatic interactions to regulate chromatin structure and dynamics.
 
+These proteins form a classic binding pair in the cell nucleus, interacting through strong electrostatic attraction while remaining in a highly dynamic, disordered state.
+
+> **Key Finding**: A 2023 Nature study [1] revealed that while ProTα-H1 condensates exhibit extremely high macroscopic viscosity (~300× that of water), the molecular-scale motion of protein chains remains remarkably fast (~3× slower than in dilute solution). This "macroscopically viscous, microscopically active" characteristic challenges traditional understanding.
+
+## Learning Objectives
+
+1. Build multi-component systems using `CondenSimAdapter`
+2. Use the `MDP` class to construct monomers with structured domains
+
+## Workflow at a Glance
+
+1. **Prepare inputs and directories**: set up `run` and confirm droplet geometry.
+2. **Initialize configuration**: generate `H1_Prota.yaml` with `adapter init`.
+3. **Define components and domains**: update IDP/MDP inputs and set H1 `fdomains`.
+4. **Estimate droplet density**: use `adapter droplet-density` to choose radius and molecule counts.
+5. **Run CG simulation**: execute `adapter cg` to build the droplet.
+6. **Backmap and minimize**: run `adapter backmap` and `adapter minimize` with droplet-specific box options.
+7. **Refine structured domain**: use Q-based CV with plumed (to be implemented).
+
+## Step 0: Prepare Inputs
+
+```bash
+cd Tutorials/Tutorial_2_H1_ProTalpha_droplet
+mkdir run
+cd run
+```
+
+> **Note**: This tutorial uses droplet geometry for simulation — a near-spherical configuration.
+
+![three topology](assets/three_topology.png)
+
+- (a) 'Grid' geometry: Continuous dense phase with periodic boundaries in x, y, z.
+- (b) 'Droplet' geometry: Protein dense phase surrounded by dilute phase.
+- (c) 'Slab' geometry: Simulation with periodic boundaries in x, y and interfaces with dilute phase along z.
+
+
+## Step 1: Initialize configuration with `adapter init`
+
+First, we use `adapter init` to generate the YAML template with experimental ionic strength and temperature. For this electrostatics‑dominated system, we choose the force field optimized for electrostatic interactions: **mpipi_recharged**.
+
+```bash
+adapter init -ff mpipi_recharged --type mixed -n 1 1 -tp droplet -r 6 -t 100 -T 295 -I 0.12 --name H1_Prota
+```
+
+The generated YAML is:
+```yaml
+system_name: H1_Prota
+
+# CG force field
+force_field: mpipi_recharged   # calvados | hps_urry | cocomo | mpipi_recharged
+
+# Environment parameters
+radius: 6    # nm (droplet radius, box = [2*r, 2*r, 2*r])
+box: [12.0, 12.0, 12.0]   # nm (x, y, z)
+temperature: 295.0         # Kelvin
+ionic: 0.12                # Molar (ionic strength)
+
+# Topology type:
+#   - grid: Continuous dense phase with periodic boundaries in x, y, z.
+#   - droplet: Spherical droplet confined within radius r, surrounded by dilute phase
+#   - slab: Geometry with periodic boundaries in x, y and interfaces with dilute phase along z.
+topol: droplet
+
+# CG simulation parameters
+simulation:
+  steps: 10000000   # 100.0 ns (1 step = 10 fs)
+  wfreq: 5000        # write frequency - save per 50 ps
+  verbose: true
+
+# Component definitions
+components:
+  - name: protein_A
+    type: IDP          # IDP or MDP
+    nmol: 1           # number of molecules (can be adjusted per component)
+    ffasta: input/protein_A.fasta
+
+  - name: protein_B
+    type: MDP          # IDP or MDP
+    nmol: 1           # number of molecules (can be adjusted per component)
+    fpdb: input/protein_B.pdb
+    # Domain definitions (required for MDP with restraints):
+    fdomains: |
+      protein_B:
+        - [1, 50]    # Domain 1: residues 1-50
+        - [51, 100]  # Domain 2: residues 51-100
+```
+
+## Step 2: Define components and MDP domains
+
+Next, replace the placeholder names and file paths with the real inputs, and define `fdomains` for the MDP (structured domains of a multidomain protein). In the H1 case, there is only one structured domain.
+
+```yaml
+# Component definitions
+components:
+  - name: prota
+    type: IDP          # IDP or MDP
+    nmol: 1           # number of molecules (can be adjusted per component)
+    ffasta: ../input/prota.fasta
+
+  - name: H1
+    type: MDP          # IDP or MDP
+    nmol: 1           # number of molecules (can be adjusted per component)
+    fpdb: ../input/H1.pdb
+    # Domain definitions (required for MDP with restraints):
+    fdomains: |
+      H1:
+        - [22, 96]  
+```
+
+### MDP Class
+
+For H1, it contains a Winged Helix DNA-binding Domain as shown in the figure below.
+
+![H1](assets/H1.png)
+
+In CondenSimAdapter, proteins containing structured regions are uniformly categorized as Multi-domain Proteins (MDP), even in cases like H1 which possesses only a single globular domain.
+
+For such proteins, users are required to:
+
+- **Provide the molecular structure**: This file must contain coordinates for all heavy atoms. The structure can be derived from experimental data (e.g., X-ray, NMR) or predicted using tools such as AlphaFold.
+
+- **Define domain boundaries**: These definitions must be set prior to simulation. They can be determined based on established structural biology knowledge or inferred from the Predicted Aligned Error (PAE) matrix generated by AlphaFold.
+
+For the defined domains, their structural integrity is generally preserved during the CG simulation, although the specific handling strategies vary across different force fields. Specifically, some force fields scale down the interaction strength of beads within the domain, while others alter the CG mapping scheme from a $C_\alpha$-based approach to a center-of-mass (COM) based representation. Despite these nuances in implementation, the relative positions of beads within a domain are typically constrained.
+
+In CondenSimAdapter, our implementations for CALVADOS, COCOMO, and Mpipi-recharged are identical to their official counterparts. However, an exception applies to HPS-Urry. Since OpenMM does not natively support the rigid-body constraints (freezing internal coordinates) used in the original LAMMPS implementation, we have substituted this with an Elastic Network approach (ENM/ENN). Consequently, the results may differ slightly from the original HPS-Urry implementation.
+
+## Step 3: Estimate droplet density with `adapter droplet-density`
+
+### Droplet Density Estimation
+
+For droplet simulations, we have designed a helper function—`adapter droplet-density`. This command helps you determine how many protein monomers to pack into a spherical droplet, or conversely, what droplet radius is appropriate for a given number of monomers.
+
+```bash
+adapter droplet-density -h
+```
+
+```text
+Usage: adapter droplet-density [OPTIONS] [EXTRA_NMOL]...
+
+  Estimate protein density in a droplet geometry.
+
+  Calculates the protein concentration (mg/mL) based on:
+      - Configuration YAML (components, sequences, residue counts)
+      - Droplet radius (from -r or YAML)
+      - Optional: number of molecules per component (-n flag)
+
+  Use -n to specify molecule counts and calculate achievable density.
+  Example: adapter droplet-density -f config.yaml -n 100 200
+
+  Warnings are issued if density is below 300 mg/mL or above 800 mg/mL.
+
+  Examples:
+      adapter droplet-density -f config.yaml
+      adapter droplet-density -f config.yaml -r 20 -n 10 20
+
+Options:
+  -f, --input-file PATH  Configuration YAML file  [required]
+  -r, --radius FLOAT     Droplet radius in nm (defaults to value in YAML if
+                         present)
+  -n, --nmol TEXT        Number of molecules for each component (space-
+                         separated, e.g., -n "10 20")
+  -h, --help             Show this message and exit.
+```
+
+For this system, H1 monomers carry a net charge of +54, while ProTα carries a net charge of -43. A molar ratio of 5:6 generally provides good charge matching between the two components.
+
+```bash
+adapter droplet-density -f H1_Prota.yaml -r 5 -n 6 5
+```
+
+```text
+============================================================
+Droplet Density Estimation
+============================================================
+
+  Input:
+    Configuration: H1_Prota.yaml
+    Radius: 5.00 nm
+    Volume: 523.60 nm³ (5.235988e-22 L)
+
+  Composition:
+    Total components: 2
+    Total molecules: 11
+    Total mass: 177026.17 Da (2.939657e-19 g)
+    Molecule counts: User-provided via -n flag
+      1. prota: 6 molecules
+      2. H1: 5 molecules
+    Mass calculation: Exact (from sequences)
+
+  Density:
+    561.4 mg/mL (g/L)
+    ✓ Density is within recommended range (300-800 mg/mL)
+```
+
+The corresponding densities are 421.8 and 324.9 mg/mL at radii of 5.5 and 6.0 nm, respectively.
+
+For this system, the experimentally measured protein density via Fluorescence Intensity ranges from 150-430 mg/mL, while all-atom simulations yield 290 mg/mL. We ultimately chose a radius of 6 nm with 5 H1 and 6 ProTα molecules.
+
+## Step 4: Run CG simulation with `adapter cg`
+
+Once the configuration is complete, similar to Tutorial 1, we execute the coarse-grained simulation using `adapter cg`:
+
+```bash
+adapter cg -f H1_Prota.yaml
+```
+
+This yields the final structure from the CG simulation:
+
+![H1_cg](assets/H1_droplet.png)
+
+> **Note on Droplet Simulation**: During the CG simulation for droplets, an additional spherical confinement potential is applied. This restricts the proteins within a defined radius, facilitating the formation of a dense phase resembling a liquid droplet.
+
+## Step 5: Backmap and minimize (`adapter backmap` / `adapter minimize`)
+
+Next, we proceed with the backmapping and minimization steps:
+
+```bash
+adapter backmap -f H1_Prota.yaml
+
+adapter minimize -f H1_Prota.yaml -ff 2 --salt-conc 0.12 --solvate -bt dodecahedron -dd 2
+```
+
+In the minimization command, we introduce two parameters specifically designed for droplet geometry: **`-bt`** and **`-dd`**.
+
+These settings control the box construction and solvation process (internally utilizing `gmx editconf`). Instead of filling a large cubic box, the tool constructs a simulation box (here, a dodecahedron) that wraps the spherical droplet with a defined water shell (thickness determined by `-dd`). This strategy significantly reduces the total number of particles in the system, optimizing computational efficiency.
+
+The resulting solvated system is illustrated below. As shown, the droplet is perfectly encased within a rhombic dodecahedron box, providing an optimal solvent buffer while significantly reducing the total volume and particle count compared to a standard cubic box
+
+![solvated_box](assets/explicit_box.png)
+
+
+
+
+## Step 6: Using Q-based CV to refine structured domain with plumed
+
+To be implemented.
+
+## Reference
+
+[1] **Extreme dynamics in a biomolecular condensate**  N. Galvanetto, M.T. Ivanović, A. Chowdhury, et al.  *Nature* **619**, 876–883 (2023)  DOI: [10.1038/s41586-023-06329-5](https://doi.org/10.1038/s41586-023-06329-5)

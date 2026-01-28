@@ -72,6 +72,61 @@ class ComputePlatform(Enum):
 
 
 # =============================================================================
+# Droplet Confinement Force
+# =============================================================================
+
+DROPLET_FORCE_K = 1.0
+DROPLET_FORCE_STRIDE = 10
+
+
+def _is_droplet_topology(topol: Any) -> bool:
+    if isinstance(topol, TopologyType):
+        return topol == TopologyType.DROPLET
+    return str(topol).lower() == "droplet"
+
+
+def _get_droplet_params(config: "CGSimulationConfig") -> tuple:
+    box = config.box
+    center = (box[0] / 2.0, box[1] / 2.0, box[2] / 2.0)
+    radius = config.droplet_radius if config.droplet_radius is not None else box[0] / 2.0
+    return radius, center
+
+
+def add_droplet_force(
+    system: mm.System,
+    radius: float,
+    center: tuple,
+    k: float = DROPLET_FORCE_K,
+    stride: int = DROPLET_FORCE_STRIDE,
+) -> mm.System:
+    """
+    Add spherical confinement (droplet) force to the system.
+
+    Energy expression:
+        E = k * step(r - r0) * (r - r0)
+        where r = sqrt((x-x0)^2 + (y-y0)^2 + (z-z0)^2)
+    """
+    n_particles = system.getNumParticles()
+    energy_expression = (
+        "k * step(r - r0) * (r - r0); "
+        "r = sqrt((x-x0)^2 + (y-y0)^2 + (z-z0)^2)"
+    )
+
+    confinement_force = mm.CustomExternalForce(energy_expression)
+    confinement_force.addGlobalParameter("k", k)
+    confinement_force.addGlobalParameter("r0", radius)
+    confinement_force.addGlobalParameter("x0", center[0])
+    confinement_force.addGlobalParameter("y0", center[1])
+    confinement_force.addGlobalParameter("z0", center[2])
+
+    for idx in range(0, n_particles, max(stride, 1)):
+        confinement_force.addParticle(idx, [])
+
+    system.addForce(confinement_force)
+    return system
+
+
+# =============================================================================
 # Configuration Classes
 # =============================================================================
 
@@ -213,6 +268,10 @@ class CGComponent:
             # Normalize to lower-case to match enum values
             comp_type = ComponentType(comp_type.lower())
         
+        # For MDP type, default restraint to True if not explicitly specified
+        # This is the expected behavior when restraint fields are hidden in YAML
+        is_mdp = comp_type == ComponentType.MDP
+        
         return cls(
             name=d['name'],
             type=comp_type,
@@ -221,7 +280,7 @@ class CGComponent:
             fpdb=d.get('fpdb'),
             fdomains=d.get('fdomains'),
             fpae=d.get('fpae'),
-            restraint=d.get('restraint', False),
+            restraint=d.get('restraint', True) if is_mdp else d.get('restraint', False),
             restraint_type=d.get('restraint_type', 'harmonic'),
             use_com=d.get('use_com', False),
             k_harmonic=d.get('k_harmonic', 700.0),
@@ -306,6 +365,7 @@ class CGSimulationConfig:
     
     # Topology
     topol: TopologyType = TopologyType.SLAB
+    droplet_radius: Optional[float] = None
     
     # Simulation parameters
     simulation: SimulationParams = field(default_factory=SimulationParams)
@@ -345,6 +405,8 @@ class CGSimulationConfig:
             errors.append("system_name is required")
         if len(self.box) != 3:
             errors.append("box must be a list of 3 values [x, y, z]")
+        if self.droplet_radius is not None and self.droplet_radius <= 0:
+            errors.append("droplet radius must be positive")
         if not self.components:
             errors.append("At least one component is required")
         for comp in self.components:
@@ -360,10 +422,13 @@ class CGSimulationConfig:
             'temperature': self.temperature,
             'ionic': self.ionic,
             'topol': self.topol.value if isinstance(self.topol, TopologyType) else self.topol,
+            'radius': self.droplet_radius,
             'simulation': self.simulation.to_dict(),
             'components': [c.to_dict() for c in self.components],
             'output_dir': self.output_dir,
         }
+        if d.get('radius') is None:
+            d.pop('radius', None)
         if self.backmap is not None:
             d['backmap'] = self.backmap.to_dict()
         return d
@@ -400,6 +465,8 @@ class CGSimulationConfig:
         if 'backmap' in d and d['backmap']:
             backmap = BackmapConfig.from_dict(d['backmap'])
         
+        droplet_radius = d.get('radius', d.get('droplet_radius'))
+        
         return cls(
             system_name=d.get('system_name', 'cg_simulation'),
             force_field=d.get('force_field', 'calvados'),
@@ -407,6 +474,7 @@ class CGSimulationConfig:
             temperature=d.get('temperature', 310.0),
             ionic=d.get('ionic', 0.15),
             topol=topol,
+            droplet_radius=droplet_radius,
             simulation=simulation,
             components=components,
             output_dir=d.get('output_dir', 'output_cg'),
@@ -816,25 +884,25 @@ class CGSimulator:
         # Try cached file
         surface_file = os.path.join(self.output_dir or self.config.output_dir, 'surface')
         if os.path.exists(surface_file):
-            print(f"  加载 SASA 数据: {surface_file}")
+            print(f"  Loading SASA data: {surface_file}")
             return np.loadtxt(surface_file)
 
         # Try alternative path
         alt_surface_file = os.path.join(self.output_dir or self.config.output_dir, 'sasa_values.txt')
         if os.path.exists(alt_surface_file):
-            print(f"  加载 SASA 数据: {alt_surface_file}")
+            print(f"  Loading SASA data: {alt_surface_file}")
             return np.loadtxt(alt_surface_file)
 
         # Compute if no cached file
         try:
             sasa = self._compute_all_sasa_values()
             if sasa:
-                print(f"  计算得到 {len(sasa)} 个 SASA 值")
+                print(f"  Calculated {len(sasa)} SASA values")
                 return np.array(sasa)
         except Exception as e:
-            print(f"  SASA 计算失败: {e}")
+            print(f"  SASA calculation failed: {e}")
 
-        print(f"  未找到 SASA 文件，使用默认值")
+        print(f"  SASA file not found, using default values")
         return None
 
     def get_sasa_values(self) -> List[float]:
@@ -918,7 +986,7 @@ class CGSimulator:
                 for res_idx in range(nres):
                     chain_ids.append(current_chain_id)
                     is_folded.append(single_folded[res_idx])
-                    molecule_indices.append(current_chain_id)  # 链ID就是分子ID
+                    molecule_indices.append(current_chain_id)  # chain ID is molecule ID
                     component_names.append(comp.name)
                     local_residue_indices.append(res_idx + 1)  # 1-based
                     sasa_values.append(single_sasa[res_idx])
@@ -937,19 +1005,19 @@ class CGSimulator:
 
     def _get_component_sequence(self, comp: CGComponent) -> str:
         """
-        获取组件的单链序列
+        Get single-chain sequence for component
 
         Args:
-            comp: CGComponent 实例
+            comp: CGComponent instance
 
         Returns:
-            单链序列字符串
+            Single-chain sequence string
         """
-        # 如果已有序列，直接返回
+        # If sequence already exists, return directly
         if comp.seq:
             return comp.seq
 
-        # 从FASTA文件读取（IDP）或PDB文件读取（MDP）
+        # Read from FASTA file (IDP) or PDB file (MDP)
         if comp.type == ComponentType.IDP:
             if comp.ffasta:
                 return self._read_fasta(comp.ffasta, component_name=comp.name)
@@ -965,65 +1033,65 @@ class CGSimulator:
 
     def _read_fasta(self, fasta_path: str, component_name: str = None) -> str:
         """
-        从FASTA文件读取序列
+        Read sequence from FASTA file
 
-        如果指定了 component_name，则返回匹配该名称的序列。
-        如果未指定或找不到匹配，则返回第一条序列。
+        If component_name is specified, return the sequence matching that name.
+        If not specified or no match found, return the first sequence.
 
         Args:
-            fasta_path: FASTA文件路径
-            component_name: 组件名称（用于选择序列）
+            fasta_path: FASTA file path
+            component_name: Component name (used for sequence selection)
 
         Returns:
-            序列字符串
+            Sequence string
         """
         from Bio import SeqIO
 
-        # 处理相对路径
+        # Handle relative paths
         if not os.path.isabs(fasta_path):
-            # 相对于当前工作目录或配置文件目录
+            # Relative to current working directory or config file directory
             if hasattr(self.config, 'config_path') and self.config.config_path:
                 config_dir = os.path.dirname(os.path.abspath(self.config.config_path))
                 fasta_path = os.path.join(config_dir, fasta_path)
 
-        # 读取FASTA文件
+        # Read FASTA file
         records = SeqIO.to_dict(SeqIO.parse(fasta_path, "fasta"))
         if not records:
             raise ValueError(f"Empty or invalid FASTA file: {fasta_path}")
 
-        # 如果指定了组件名称，尝试匹配
+        # If component name is specified, try to match
         if component_name:
             if component_name in records:
                 return str(records[component_name].seq)
             else:
-                # 尝试不区分大小写的匹配
+                # Try case-insensitive matching
                 for name in records:
                     if name.lower() == component_name.lower():
                         return str(records[name].seq)
-                # 找不到匹配，使用第一条序列并警告
+                # No match found, use first sequence with warning
                 print(f"  [WARNING] Component '{component_name}' not found in fasta, using first sequence")
 
-        # 返回第一条序列
+        # Return first sequence
         return str(list(records.values())[0].seq)
 
     def _seq_from_pdb(self, pdb_path: str) -> str:
         """
-        从PDB文件提取序列
+        Extract sequence from PDB file
 
         Args:
-            pdb_path: PDB文件路径
+            pdb_path: PDB file path
 
         Returns:
-            序列字符串
+            Sequence string
         """
-        # 处理相对路径
+        # Handle relative paths
         if not os.path.isabs(pdb_path):
-            # 相对于当前工作目录或配置文件目录
+            # Relative to current working directory or config file directory
             if hasattr(self.config, 'config_path') and self.config.config_path:
                 config_dir = os.path.dirname(os.path.abspath(self.config.config_path))
                 pdb_path = os.path.join(config_dir, pdb_path)
 
-        # 使用MDAnalysis提取序列
+        # Use MDAnalysis to extract sequence
         try:
             from MDAnalysis import Universe
         except ImportError:
@@ -1033,7 +1101,7 @@ class CGSimulator:
             warnings.simplefilter("ignore")
             u = Universe(pdb_path)
 
-            # 获取唯一残基
+            # Get unique residues
             residues = u.residues
             n_res = len(residues)
 
@@ -1055,58 +1123,58 @@ class CGSimulator:
 
     def _get_component_folded_domains(self, comp: CGComponent, nres: int) -> List[int]:
         """
-        获取组件的folded domain信息
+        Get folded domain information for component
 
         Args:
-            comp: CGComponent 实例
-            nres: 序列长度
+            comp: CGComponent instance
+            nres: Sequence length
 
         Returns:
-            长度为nres的列表，0=unfolded/IDP，1=folded domain
+            List of length nres, 0=unfolded/IDP, 1=folded domain
         """
-        # IDP默认全是0
+        # IDP defaults to all 0
         if comp.type == ComponentType.IDP:
             return [0] * nres
 
-        # MDP检查是否有fdomains配置
+        # MDP check if fdomains is configured
         if not comp.fdomains:
             return [0] * nres
 
-        # 解析fdomains YAML
+        # Parse fdomains YAML
         domains = self._parse_fdomains(comp.fdomains)
 
-        # 构建folded数组
+        # Build folded array
         folded = [0] * nres
         for (start, end) in domains:
-            # 确保在有效范围内
+            # Ensure within valid range
             start = max(1, start)  # 1-based
             end = min(nres, end)
             if start <= end:
-                for i in range(start - 1, end):  # 转换为0-based
+                for i in range(start - 1, end):  # Convert to 0-based
                     folded[i] = 1
 
         return folded
 
     def _parse_fdomains(self, fdomains: str) -> List[tuple]:
         """
-        解析fdomains配置
+        Parse fdomains configuration
 
-        支持两种格式：
-        1. 文件路径：解析YAML文件
-        2. 内联YAML：直接解析字符串
+        Supports two formats:
+        1. File path: parse YAML file
+        2. Inline YAML: parse string directly
 
         Args:
-            fdomains: fdomains配置
+            fdomains: fdomains configuration
 
         Returns:
-            域列表，每个域为(start, end)元组（1-based）
+            List of domains, each domain is (start, end) tuple (1-based)
         """
-        # 检查是否是内联YAML
+        # Check if it's inline YAML
         if self.config._is_inline_yaml(fdomains):
-            # 直接解析字符串
+            # Parse string directly
             data = yaml.safe_load(fdomains)
         else:
-            # 解析文件
+            # Parse file
             fdomains_abs = fdomains
             if not os.path.isabs(fdomains):
                 if hasattr(self.config, 'config_path') and self.config.config_path:
@@ -1119,7 +1187,7 @@ class CGSimulator:
             with open(fdomains_abs, 'r') as f:
                 data = yaml.safe_load(f)
 
-        # 解析域定义
+        # Parse domain definitions
         domains = []
         if isinstance(data, dict):
             for protein_name, domain_list in data.items():
@@ -1132,44 +1200,44 @@ class CGSimulator:
 
     def clear_topology_cache(self):
         """
-        清除拓扑信息缓存
+        Clear topology information cache
 
-        下次调用接口方法时会重新计算。
+        Will be recalculated when interface methods are called next time.
         """
         self._topology_info = None
 
     def prepare_calvados_output(self) -> Dict[str, str]:
         """
-        准备 CALVADOS 输出的目录结构
+        Prepare CALVADOS output directory structure
 
-        统一输出结构：
+        Unified output structure:
         {output_dir}/
         ├── {system_name}_CG/
-        │   ├── raw/                  # 原生输出
-        │   ├── trajectory.xtc        # 整理后的轨迹
-        │   ├── final.pdb             # 整理后的最终结构
-        │   └── simulation.log        # 高层级日志
+        │   ├── raw/                  # Native output
+        │   ├── trajectory.xtc        # Organized trajectory
+        │   ├── final.pdb             # Organized final structure
+        │   └── simulation.log        # High-level log
 
         Returns:
-            包含输出路径的字典
+            Dictionary containing output paths
         """
         self._ensure_setup()
         self._ensure_not_running()
 
-        # 检查 self.output_dir 是否已包含 _CG 后缀
+        # Check if self.output_dir already contains _CG suffix
         expected_suffix = f"{self.config.system_name}_CG"
         if self.output_dir.endswith(expected_suffix):
-            # 已包含 _CG 后缀，直接使用
+            # Already contains _CG suffix, use directly
             output_dir = self.output_dir
             task_name = expected_suffix
         else:
-            # 添加 _CG 后缀
+            # Add _CG suffix
             task_name = expected_suffix
             output_dir = os.path.join(self.output_dir, task_name)
 
         raw_dir = os.path.join(output_dir, 'raw')
 
-        # 如果目录已存在，备份后重建
+        # If directory exists, backup and recreate
         import shutil
         from datetime import datetime
 
@@ -1177,9 +1245,9 @@ class CGSimulator:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_dir = f"{output_dir}_backup_{timestamp}"
             shutil.move(output_dir, backup_dir)
-            print(f"  📁 备份旧结果到: {backup_dir}")
+            print(f"  Backup old results to: {backup_dir}")
 
-        # 先创建父目录，再创建 raw 子目录
+        # Create parent directory first, then raw subdirectory
         os.makedirs(output_dir, exist_ok=True)
         os.makedirs(raw_dir, exist_ok=True)
 
@@ -1190,7 +1258,7 @@ class CGSimulator:
         }
     
     def _copy_input_files(self, output_dir: str):
-        """复制输入文件到输出目录"""
+        """Copy input files to output directory"""
         input_dir = os.path.join(output_dir, 'input')
         os.makedirs(input_dir, exist_ok=True)
         
@@ -1208,20 +1276,20 @@ class CGSimulator:
                     shutil.copy2(comp.fpae, os.path.join(input_dir, os.path.basename(comp.fpae)))
     
     def _ensure_setup(self):
-        """确保已完成设置"""
+        """Ensure setup is complete"""
         if not self.is_setup:
             raise RuntimeError("Simulation not set up. Call setup() first.")
     
     def _ensure_not_running(self):
-        """确保未在运行"""
+        """Ensure not running"""
         if self.is_running:
             raise RuntimeError("Simulation is already running")
 
     # -------------------------------------------------------------------------
-    # Pre-equilibration Methods (使用 CALVADOS 构建初始结构)
+    # Pre-equilibration Methods (Using CALVADOS to Build Initial Structure)
     # -------------------------------------------------------------------------
-    # 说明：所有非 CALVADOS 的 runner 都会自动调用此方法进行预平衡
-    # 预平衡参数是硬编码的，每个 runner 可以有不同的默认参数
+    # Note: All non-CALVADOS runners automatically call this method for pre-equilibration
+    # Pre-equilibration parameters are hardcoded, but each runner can have different defaults
     # -------------------------------------------------------------------------
 
     def _run_pre_equilibration(
@@ -1234,28 +1302,28 @@ class CGSimulator:
         platform: ComputePlatform = ComputePlatform.CUDA,
     ) -> Optional[str]:
         """
-        运行预平衡（使用 CALVADOS 构建初始结构）
+        Run pre-equilibration (Using CALVADOS to Build Initial Structure)
 
-        预平衡的目的：
-        1. 用 CALVADOS 力场构建初始 CG 结构
-        2. 对 MDP 蛋白进行短时间模拟（带约束），使其适应 CG 表示
-        3. 对 IDP 蛋白进行短时间模拟（无约束），生成初始 CG 结构
-        4. 为后续的目标力场（COCOMO/HPS/MOFF/OpenMpipi）提供良好的初始结构
+        Purpose of pre-equilibration:
+        1. Build initial CG structure using CALVADOS force field
+        2. Run short simulation for MDP protein (with restraints) to adapt to CG representation
+        3. Run short simulation for IDP protein (without restraints) to generate initial CG structure
+        4. Provide good initial structure for subsequent force field simulations (COCOMO/HPS/MOFF/OpenMpipi)
 
-        对于 MDP 蛋白的映射选择：
-        - CA (alpha carbon): 使用 alpha-carbon 坐标，适用于需要保留骨架信息的场景
-        - COM (center of mass): 使用残基质心，适用于更平滑的映射
+        Mapping options for MDP protein:
+        - CA (alpha carbon): Use alpha-carbon coordinates, suitable for scenarios requiring backbone information
+        - COM (center of mass): Use residue center of mass, suitable for smoother mapping
 
         Args:
-            gpu_id: GPU 设备 ID
-            steps: 预平衡步数（默认 10w 步）
-            mapping: 映射方式 ('ca' 或 'com')
-            k_restraint: 约束力常数 (kJ/(mol·nm²))
-            use_com: 是否使用 COM 约束
-            platform: 计算平台（CUDA 或 CPU）
+            gpu_id: GPU device ID
+            steps: Pre-equilibration steps (default 100k steps)
+            mapping: Mapping method ('ca' or 'com')
+            k_restraint: Restraint force constant (kJ/(mol·nm²))
+            use_com: Whether to use COM restraint
+            platform: Computing platform (CUDA or CPU)
 
         Returns:
-            预平衡后的 final.pdb 文件路径，如果没有组件则返回 None
+            Path to final.pdb after pre-equilibration, or None if no components
         """
         from .calvados_wrapper import CalvadosWrapper
         import shutil
@@ -1263,24 +1331,24 @@ class CGSimulator:
         self._ensure_setup()
         self._ensure_not_running()
 
-        # 检查是否有组件需要处理
+        # Check if there are components to process
         has_components = len(self.config.components) > 0
         has_mdp = any(comp.type == ComponentType.MDP for comp in self.config.components)
         if not has_components:
             return None
 
-        # 对于 MDP 系统打印约束信息，IDP 系统不打印
+        # Print restraint info for MDP systems, skip for IDP systems
         if has_mdp:
-            print(f"\n[Pre-equilibration] 使用 CALVADOS 构建初始结构（MDP 蛋白，带约束）...")
-            print(f"  映射方式: {mapping.upper()}")
-            print(f"  约束力常数: {k_restraint} kJ/(mol·nm²)")
-            print(f"  使用 COM 约束: {'是' if use_com else '否'}")
+            print(f"\n[Pre-equilibration] Using CALVADOS to Build Initial Structure (MDP protein, with restraints)...")
+            print(f"  Mapping method: {mapping.upper()}")
+            print(f"  Restraint force constant: {k_restraint} kJ/(mol·nm²)")
+            print(f"  Use COM restraint: {'Yes' if use_com else 'No'}")
         else:
-            print(f"\n[Pre-equilibration] 使用 CALVADOS 构建初始结构（纯 IDP 系统）...")
-            print(f"  映射方式: {mapping.upper()}")
-        print(f"  预平衡步数: {steps}")
+            print(f"\n[Pre-equilibration] Using CALVADOS to Build Initial Structure (Pure IDP system)...")
+            print(f"  Mapping method: {mapping.upper()}")
+            print(f"  Pre-equilibration steps: {steps}")
 
-        # 保存原始组件配置
+        # Save original component configuration
         original_components = []
         for comp in self.config.components:
             original_components.append({
@@ -1290,7 +1358,7 @@ class CGSimulator:
                 'k_harmonic': comp.k_harmonic,
             })
 
-        # 创建临时配置用于预平衡
+        # Create temporary configuration for pre-equilibration
         temp_config = self._create_preequil_config(
             steps=steps,
             mapping=mapping,
@@ -1299,36 +1367,36 @@ class CGSimulator:
             platform=platform,
         )
 
-        # 输出目录结构：{output_dir}/{system_name}_CG/equilibration/
-        # 与 run_calvados 保持一致
+        # Output directory structure: {output_dir}/{system_name}_CG/equilibration/
+        # Consistent with run_calvados
         task_name = f"{self.config.system_name}_CG"
         equilibration_dir = os.path.join(self.output_dir, task_name, 'equilibration')
         raw_dir = os.path.join(equilibration_dir, 'raw')
 
-        # 如果目录已存在，先备份
+        # If directory exists, backup first
         if os.path.exists(equilibration_dir):
             import time
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             backup_dir = f"{equilibration_dir}_backup_{timestamp}"
             shutil.move(equilibration_dir, backup_dir)
-            print(f"  📁 备份旧预平衡结果到: {backup_dir}")
+            print(f"  Backup old pre-equilibration results to: {backup_dir}")
 
         os.makedirs(raw_dir, exist_ok=True)
 
         try:
-            # GPU 选择由 sim.py 中的 DeviceIndex 属性控制
-            # 不再需要设置 CUDA_VISIBLE_DEVICES 环境变量
+            # GPU selection is controlled by DeviceIndex attribute in sim.py
+            # No need to set CUDA_VISIBLE_DEVICES environment variable anymore
 
-            # 调用 CalvadosWrapper
+            # Call CalvadosWrapper
             wrapper = CalvadosWrapper(temp_config)
 
-            # 写入配置文件到 raw 目录（传入 verbose）
+            # Write config files to raw directory (pass verbose)
             verbose = self.config.simulation.verbose
             files = wrapper._write_to_dir(raw_dir, gpu_id=gpu_id, verbose=verbose)
-            print(f"  📄 配置文件已写入: {files['components']}")
-            print(f"  🖥️  平台: {platform.value}")
+            print(f"  Config files written to: {files['components']}")
+            print(f"  Platform: {platform.value}")
 
-            # 运行 CALVADOS 模拟
+            # Run CALVADOS simulation
             from CondenSimAdapter.extern.ms2_calvados.calvados import sim as calvados_sim
             try:
                 calvados_sim.run(
@@ -1337,10 +1405,10 @@ class CGSimulator:
                     fcomponents='components.yaml'
                 )
             except Exception as calvados_error:
-                # 如果 CUDA 失败，尝试使用 CPU
+                # If CUDA fails, try using CPU
                 if 'CUDA' in str(calvados_error) or 'Platform' in str(calvados_error) or 'no registered Platform' in str(calvados_error):
-                    print(f"  ⚠️  CALVADOS 预平衡 CUDA 失败，尝试使用 CPU...")
-                    # 修改配置文件中的 platform 为 CPU
+                    print(f"  CALVADOS pre-equilibration CUDA failed, trying CPU...")
+                    # Modify platform in config file to CPU
                     import yaml
                     config_file = os.path.join(raw_dir, 'config.yaml')
                     with open(config_file, 'r') as f:
@@ -1349,7 +1417,7 @@ class CGSimulator:
                     with open(config_file, 'w') as f:
                         yaml.dump(config_dict, f)
                     
-                    # 重新运行
+                    # Re-run
                     calvados_sim.run(
                         path=raw_dir,
                         fconfig='config.yaml',
@@ -1358,7 +1426,7 @@ class CGSimulator:
                 else:
                     raise
 
-            # 查找生成的最终结构
+            # Find the generated final structure
             final_pdb = os.path.join(equilibration_dir, 'final.pdb')
             if os.path.exists(os.path.join(raw_dir, 'checkpoint.pdb')):
                 shutil.copy2(
@@ -1366,7 +1434,7 @@ class CGSimulator:
                     final_pdb
                 )
             else:
-                # 找带时间戳的 PDB
+                # Find timestamped PDB files
                 for f in os.listdir(raw_dir):
                     if f.endswith('.pdb') and f != 'top.pdb':
                         shutil.copy2(
@@ -1375,25 +1443,25 @@ class CGSimulator:
                         )
                         break
 
-            # 复制到输出目录根路径（方便后续力场使用）
+            # Copy to output directory root (convenient for subsequent force fields)
             output_pdb = os.path.join(self.output_dir, 'preequil_final.pdb')
             if os.path.exists(final_pdb):
                 shutil.copy2(final_pdb, output_pdb)
-                print(f"  ✓ 预平衡完成: {output_pdb}")
-                print(f"  📁 预平衡输出: {equilibration_dir}")
+                print(f"  Pre-equilibration complete: {output_pdb}")
+                print(f"  Pre-equilibration output: {equilibration_dir}")
                 return output_pdb
             else:
-                print(f"  ✗ 未找到预平衡输出文件")
+                print(f"  Pre-equilibration output file not found")
                 return None
 
         except Exception as e:
-            print(f"  ✗ 预平衡失败: {e}")
+            print(f"  Pre-equilibration failed: {e}")
             import traceback
             traceback.print_exc()
             return None
 
         finally:
-            # 恢复原始组件配置
+            # Restore original component configuration
             for i, comp in enumerate(self.config.components):
                 orig = original_components[i]
                 comp.restraint = orig['restraint']
@@ -1410,34 +1478,34 @@ class CGSimulator:
         platform: ComputePlatform = ComputePlatform.CUDA,
     ) -> 'CGSimulationConfig':
         """
-        创建用于预平衡的临时配置
+        Create temporary configuration for pre-equilibration
 
-        对于 MDP 组件：
-        - 启用 restraint
-        - 设置 restraint_type 为 harmonic
-        - 根据 mapping 设置 use_com：
-          - CA: use_com=False（约束到每个残基的 CA 原子）
-          - COM: use_com=True（约束到每个残基的质心）
-        - 设置 k_harmonic 为 k_restraint
-        - 步数使用 steps
-        - 设置 platform
+        For MDP components:
+        - Enable restraint
+        - Set restraint_type to harmonic
+        - Set use_com based on mapping:
+          - CA: use_com=False (restrain to CA atom of each residue)
+          - COM: use_com=True (restrain to center of mass of each residue)
+        - Set k_harmonic to k_restraint
+        - Use steps for steps
+        - Set platform
 
         Args:
-            steps: 预平衡步数
-            mapping: 映射方式 ('ca' 或 'com')
-            k_restraint: 约束力常数
-            use_com: 是否使用 COM 约束
-            platform: 计算平台（CUDA 或 CPU）
+            steps: Pre-equilibration steps
+            mapping: Mapping method ('ca' or 'com')
+            k_restraint: Restraint force constant
+            use_com: Whether to use COM restraint
+            platform: Computing platform (CUDA or CPU)
 
         Returns:
-            临时配置对象
+            Temporary configuration object
         """
         from copy import deepcopy
 
-        # 深拷贝配置
+        # Deep copy configuration
         temp_config = deepcopy(self.config)
 
-        # 临时修改 MDP 组件的约束设置
+        # Temporarily modify MDP component restraint settings
         for comp in temp_config.components:
             if comp.type == ComponentType.MDP:
                 comp.restraint = True
@@ -1445,7 +1513,7 @@ class CGSimulator:
                 comp.use_com = use_com
                 comp.k_harmonic = k_restraint
 
-        # 修改模拟参数为预平衡参数
+        # Modify simulation parameters to pre-equilibration parameters
         temp_config.simulation = deepcopy(self.config.simulation)
         temp_config.simulation.steps = steps
         temp_config.simulation.wfreq = min(steps // 10, 1000)
@@ -1455,10 +1523,10 @@ class CGSimulator:
 
     def get_pre_equilibrated_structure(self) -> Optional[str]:
         """
-        获取预平衡后的结构文件路径
+        Get the path to the pre-equilibrated structure file
 
         Returns:
-            预平衡结构文件路径，如果未运行预平衡则返回 None
+            Path to pre-equilibration structure file, or None if pre-equilibration was not run
         """
         if self.output_dir is None:
             return None
@@ -1474,14 +1542,14 @@ class CGSimulator:
     
     def run_calvados(self, gpu_id: int = 0, continue_from: str = None, **kwargs) -> SimulationResult:
         """
-        运行 CALVADOS 模拟
+        Run CALVADOS simulation
 
-        直接使用 CALVADOS 生成的带时间戳的 PDB 文件作为最终输出。
+        Directly use CALVADOS-generated timestamped PDB files as final output.
 
         Args:
-            gpu_id: GPU 设备 ID
-            continue_from: 继续模拟的坐标文件路径（PDB格式），支持从指定结构继续模拟
-            **kwargs: 额外参数
+            gpu_id: GPU device ID
+            continue_from: PDB file path for continuing simulation, supports resuming from specified structure
+            **kwargs: Additional parameters
 
         Returns:
             SimulationResult
@@ -1493,13 +1561,13 @@ class CGSimulator:
         self._ensure_setup()
         self._ensure_not_running()
 
-        # 准备输出目录
+        # Prepare output directory
         dirs = self.prepare_calvados_output()
         output_dir = dirs['output_dir']
         raw_dir = dirs['raw_dir']
         task_name = dirs['task_name']
 
-        # 复制输入文件（在备份逻辑之后）
+        # Copy input files (after backup logic)
         self._copy_input_files(output_dir)
 
         self.is_running = True
@@ -1513,19 +1581,19 @@ class CGSimulator:
             print(f"  Raw output: {raw_dir}")
             print(f"  Topology: {self.config.topol.value if hasattr(self.config.topol, 'value') else self.config.topol}")
 
-            # GPU 选择由 sim.py 中的 DeviceIndex 属性控制
-            # 不再需要设置 CUDA_VISIBLE_DEVICES 环境变量
+            # GPU selection is controlled by DeviceIndex attribute in sim.py
+            # No need to set CUDA_VISIBLE_DEVICES environment variable anymore
 
-            # 调用 CalvadosWrapper 的配置写入和模拟运行（传入 raw_dir、gpu_id 和 verbose）
+            # Call CalvadosWrapper config writing and simulation run (pass raw_dir, gpu_id, and verbose)
             verbose = self.config.simulation.verbose
             wrapper = CalvadosWrapper(self.config)
             
-            # 处理 continue_from 参数
+            # Handle continue_from parameter
             continue_from_file = None
             if continue_from:
                 if not os.path.exists(continue_from):
                     raise FileNotFoundError(f"Continue from file not found: {continue_from}")
-                # 复制坐标文件到 raw 目录
+                # Copy coordinate file to raw directory
                 continue_from_file = os.path.basename(continue_from)
                 continue_from_dst = os.path.join(raw_dir, continue_from_file)
                 import shutil
@@ -1535,7 +1603,7 @@ class CGSimulator:
             
             wrapper._write_to_dir(raw_dir, gpu_id=gpu_id, verbose=verbose, continue_from=continue_from_file)
 
-            # 运行模拟
+            # Run simulation
             from CondenSimAdapter.extern.ms2_calvados.calvados import sim as calvados_sim
             calvados_sim.run(
                 path=raw_dir,
@@ -1543,13 +1611,13 @@ class CGSimulator:
                 fcomponents='components.yaml'
             )
 
-            # 复制轨迹文件
+            # Copy trajectory file
             self._copy_trajectory(raw_dir, output_dir)
 
-            # 直接复制带时间戳的 PDB 文件作为 final.pdb
+            # Copy timestamped PDB file directly as final.pdb
             self._copy_final_pdb(raw_dir, output_dir)
 
-            # 写入日志
+            # Write log
             elapsed = 0  # TODO: track actual time
             self._write_simulation_log(output_dir, task_name, elapsed, True)
 
@@ -1564,7 +1632,7 @@ class CGSimulator:
         finally:
             self.is_running = False
 
-        # 设置结果文件路径
+        # Set result file paths
         result.trajectory = os.path.join(output_dir, 'trajectory.xtc')
         result.structure = os.path.join(output_dir, 'final.pdb')
 
@@ -1577,7 +1645,7 @@ class CGSimulator:
         return result
 
     def _copy_trajectory(self, raw_dir: str, output_dir: str):
-        """从 raw 目录复制轨迹文件"""
+        """Copy trajectory file from raw directory"""
         import shutil
         sysname = self.config.system_name
         src_xtc = os.path.join(raw_dir, f'{sysname}.xtc')
@@ -1588,13 +1656,13 @@ class CGSimulator:
 
     def _copy_final_pdb(self, raw_dir: str, output_dir: str):
         """
-        从 raw 目录复制带时间戳的 PDB 文件到 output_dir 作为 final.pdb
+        Copy timestamped PDB file from raw directory to output_dir as final.pdb
 
-        CALVADOS 生成的 PDB 文件格式为 {system_name}_{timestamp}.pdb
+        CALVADOS generates PDB files in format {system_name}_{timestamp}.pdb
         """
         import glob
 
-        # 查找带时间戳的 PDB 文件
+        # Find timestamped PDB files
         pattern = os.path.join(raw_dir, f'{self.config.system_name}_*.pdb')
         pdb_files = glob.glob(pattern)
 
@@ -1602,34 +1670,34 @@ class CGSimulator:
             print(f"  ⚠ No timestamped PDB file found in {raw_dir}")
             return
 
-        # 找到最新的文件（按修改时间排序）
+        # Find latest file (sorted by modification time)
         latest_pdb = max(pdb_files, key=os.path.getmtime)
 
-        # 复制到 output_dir/final.pdb
+        # Copy to output_dir/final.pdb
         dst_pdb = os.path.join(output_dir, 'final.pdb')
         shutil.copy2(latest_pdb, dst_pdb)
         print(f"  📦 final.pdb (copied from {os.path.basename(latest_pdb)})")
 
     def _organize_calvados_output(self, raw_dir: str, output_dir: str, task_name: str):
         """
-        整理 CALVADOS 输出文件到统一结构
+        Organize CALVADOS output files to unified structure
 
-        统一命名规则：
+        Unified naming rules:
         - trajectory.xtc  <- {system_name}.xtc
-        - final.pdb       <- checkpoint.pdb 或时间戳 PDB
+        - final.pdb       <- checkpoint.pdb or timestamped PDB
         """
         import shutil
 
         sysname = self.config.system_name
 
-        # 1. 处理轨迹文件
+        # 1. Process trajectory file
         src_xtc = os.path.join(raw_dir, f'{sysname}.xtc')
         dst_xtc = os.path.join(output_dir, 'trajectory.xtc')
         if os.path.exists(src_xtc):
             shutil.copy2(src_xtc, dst_xtc)
             print(f"  📦 trajectory.xtc")
 
-        # 2. 查找并复制最终结构
+        # 2. Find and copy final structure
         src_pdb = os.path.join(raw_dir, 'checkpoint.pdb')
         if not os.path.exists(src_pdb):
             for f in os.listdir(raw_dir):
@@ -1642,7 +1710,7 @@ class CGSimulator:
             shutil.copy2(src_pdb, dst_pdb)
             print(f"  📦 final.pdb")
 
-        # 3. 复制重要文件
+        # 3. Copy important files
         important_files = [
             (f'{sysname}.xml', 'system.xml'),
             ('top.pdb', 'top.pdb'),
@@ -1656,10 +1724,10 @@ class CGSimulator:
                 if src != dst:
                     shutil.copy2(src, dst)
 
-        print(f"  📁 原始输出已整理到: {raw_dir}")
+        print(f"  Raw output organized to: {raw_dir}")
 
     def _write_simulation_log(self, output_dir: str, task_name: str, elapsed: float, success: bool):
-        """写入高层级模拟日志"""
+        """Write high-level simulation log"""
         from datetime import datetime
 
         log_file = os.path.join(output_dir, 'simulation.log')
@@ -1704,23 +1772,23 @@ Output Files:
     
     def run_hps(self, gpu_id: int = 0, **kwargs) -> SimulationResult:
         """
-        运行 HPS-Urry 模拟
+        Run HPS-Urry simulation
 
-        流程：
-        1. 用 CALVADOS 力场构建初始 CG 结构（预平衡）
-        2. 使用 HPSParser 解析每个 component（MDP 支持 domain）
-        3. 构建 HPSModel 并添加力场
-        4. 运行 OpenMM 模拟
+        Workflow:
+        1. Build initial CG structure using CALVADOS force field (pre-equilibration)
+        2. Use HPSParser to parse each component (MDP supports domains)
+        3. Build HPSModel and add force field
+        4. Run OpenMM simulation
 
         Args:
-            gpu_id: GPU 设备 ID
-            **kwargs: 额外参数
-                - preequil_steps: 预平衡步数
-                - preequil_mapping: 预平衡映射方式 ('ca' 或 'com')
-                - preequil_k_restraint: 预平衡约束力常数
-                - preequil_use_com: 预平衡是否使用 COM 约束
-                - preequil_platform: 预平衡平台
-                - platform: 模拟平台 (CPU/CUDA)
+            gpu_id: GPU device ID
+            **kwargs: Additional parameters
+                - preequil_steps: Pre-equilibration steps
+                - preequil_mapping: Pre-equilibration mapping method ('ca' or 'com')
+                - preequil_k_restraint: Pre-equilibration restraint force constant
+                - preequil_use_com: Pre-equilibration whether to use COM restraint
+                - preequil_platform: Pre-equilibration platform
+                - platform: Simulation platform (CPU/CUDA)
 
         Returns:
             SimulationResult
@@ -1728,23 +1796,23 @@ Output Files:
         self._ensure_setup()
         self._ensure_not_running()
 
-        # 预平衡参数
+        # Pre-equilibration parameters
         preequil_steps = kwargs.get('preequil_steps', 100000)
         preequil_mapping = kwargs.get('preequil_mapping', 'ca')
         preequil_k_restraint = kwargs.get('preequil_k_restraint', 10000.0)
         preequil_use_com = kwargs.get('preequil_use_com', True)
         preequil_platform = kwargs.get('preequil_platform', self.config.simulation.platform)
         
-        # 检查 CUDA 是否可用，如果不可用则回退到 CPU
+        # Check CUDA availability, fall back to CPU if not available
         if preequil_platform == ComputePlatform.CUDA:
             try:
                 from openmm import Platform
                 Platform.getPlatformByName('CUDA')
             except:
-                print(f"  ⚠️  CUDA 不可用，预平衡将使用 CPU")
+                print(f"  ⚠️  CUDA not available, pre-equilibration will use CPU")
                 preequil_platform = ComputePlatform.CPU
 
-        # 预平衡（使用 CALVADOS 构建初始结构）
+        # Pre-equilibration (Using CALVADOS to Build Initial Structure)
         preequil_pdb = self._run_pre_equilibration(
             gpu_id=gpu_id,
             steps=preequil_steps,
@@ -1754,7 +1822,7 @@ Output Files:
             platform=preequil_platform,
         )
         if preequil_pdb:
-            print(f"  [HPS] 使用预平衡结构: {preequil_pdb}")
+            print(f"  [HPS] Using pre-equilibration structure: {preequil_pdb}")
 
         self.is_running = True
         result = SimulationResult()
@@ -1763,7 +1831,7 @@ Output Files:
             print(f"\n[HPS-Urry] Running simulation...")
             print(f"  GPU ID: {gpu_id}")
 
-            # ===== 1. 导入 HPS 相关模块 =====
+            # ===== 1. Import HPS related modules =====
             try:
                 from CondenSimAdapter.extern.ms2_openabc.forcefields.parsers.hps_parser import HPSParser
                 from CondenSimAdapter.extern.ms2_openabc.forcefields import HPSModel
@@ -1771,41 +1839,41 @@ Output Files:
             except ImportError as e:
                 raise ImportError(f"ms2_openabc module not available: {e}")
 
-            # ===== 2. 为每个 component 创建 HPSParser =====
+            # ===== 2. Create HPSParser for each component =====
             parsers = []
-            print("\n  构建 HPSParser...")
+            print("\n  Building HPSParser...")
             
             for comp in self.config.components:
                 if comp.type == ComponentType.MDP:
-                    # MDP: 使用提供的 PDB + domain 定义
+                    # MDP: Use provided PDB + domain definition
                     if not comp.fpdb:
-                        raise ValueError(f"MDP component '{comp.name}' 需要 fpdb 文件")
+                        raise ValueError(f"MDP component '{comp.name}' requires fpdb file")
                     
-                    # 导入原子结构转 CA 的工具函数
+                    # Import tool function for converting atomistic structure to CA
                     from CondenSimAdapter.extern.ms2_openabc.utils.helper_functions import atomistic_pdb_to_ca_pdb
                     
-                    # 创建临时 CA-only PDB 文件（如果原始 PDB 不是 CA-only）
+                    # Create temporary CA-only PDB file (if original PDB is not CA-only)
                     ca_pdb_path = comp.fpdb
                     temp_ca_pdb = None
                     
-                    # 检查原始 PDB 是否是 CA-only
+                    # Check if original PDB is CA-only
                     from CondenSimAdapter.extern.ms2_openabc.utils import parse_pdb
                     original_atoms = parse_pdb(comp.fpdb)
                     if not (original_atoms['name'].eq('CA').all()):
-                        # 原始 PDB 是全原子的，需要转换为 CA-only
+                        # Original PDB is all-atom, need to convert to CA-only
                         import os
                         temp_ca_pdb = os.path.join(self.output_dir, f'_temp_{comp.name}_ca.pdb')
                         atomistic_pdb_to_ca_pdb(comp.fpdb, temp_ca_pdb)
                         ca_pdb_path = temp_ca_pdb
                     
-                    # 处理 fdomains：可能是文件路径或内联 YAML 内容
+                    # Handle fdomains: could be file path or inline YAML content
                     fdomains_path = comp.fdomains
                     temp_domains_file = None
                     
                     if comp.fdomains:
-                        # 检查是否是内联 YAML 内容（包含换行符和 YAML 格式）
+                        # Check if it's inline YAML content (contains newlines and YAML format)
                         if '\n' in comp.fdomains and ('[' in comp.fdomains or '-' in comp.fdomains):
-                            # 内联 YAML 内容，需要写入临时文件
+                            # Inline YAML content, need to write to temp file
                             import os
                             import tempfile
                             temp_domains_file = os.path.join(self.output_dir, f'_temp_{comp.name}_domains.yaml')
@@ -1813,21 +1881,21 @@ Output Files:
                                 f.write(comp.fdomains)
                             fdomains_path = temp_domains_file
                         elif not os.path.isfile(comp.fdomains):
-                            # 既不是文件也不是内联内容，可能是字符串格式的列表
+                            # Neither file nor inline content, might be string format list
                             try:
                                 import ast
-                                # 尝试解析为 Python 列表
+                                # Try to parse as Python list
                                 domains_list = ast.literal_eval(comp.fdomains)
                                 import os
                                 temp_domains_file = os.path.join(self.output_dir, f'_temp_{comp.name}_domains.yaml')
-                                # 转换为 YAML 格式
+                                # Convert to YAML format
                                 import yaml
                                 yaml_content = {comp.name: domains_list}
                                 with open(temp_domains_file, 'w') as f:
                                     yaml.dump(yaml_content, f)
                                 fdomains_path = temp_domains_file
                             except:
-                                # 如果解析失败，设为 None 让 HPSParser 处理
+                                # If parsing fails, set to None for HPSParser to handle
                                 fdomains_path = None
                     
                     parser = HPSParser(
@@ -1839,7 +1907,7 @@ Output Files:
                     if parser.enm_pairs:
                         print(f"      → {len(parser.enm_pairs)} ENM pairs")
                     
-                    # 清理临时文件
+                    # Clean up temporary files
                     if temp_ca_pdb and os.path.exists(temp_ca_pdb):
                         os.remove(temp_ca_pdb)
                     if temp_domains_file and os.path.exists(temp_domains_file):
@@ -1848,15 +1916,15 @@ Output Files:
                     parsers.append((comp, parser))
                     
                 elif comp.type == ComponentType.IDP:
-                    # IDP: 从 FASTA 序列构建直的 CA 链
+                    # IDP: Build straight CA chain from FASTA sequence
                     if not comp.ffasta:
-                        raise ValueError(f"IDP component '{comp.name}' 需要 ffasta 文件")
+                        raise ValueError(f"IDP component '{comp.name}' requires ffasta file")
                     
-                    # 读取 FASTA 序列
+                    # Read FASTA sequence
                     with open(comp.ffasta, 'r') as f:
                         fasta_content = f.read()
                     
-                    # 解析 FASTA（提取匹配组件名的序列）
+                    # Parse FASTA (extract sequence matching component name)
                     lines = fasta_content.strip().split('\n')
                     sequence = None
                     current_seq_lines = []
@@ -1864,33 +1932,33 @@ Output Files:
                     
                     for line in lines:
                         if line.startswith('>'):
-                            # 如果上一段是我们要的序列，保存它
+                            # If previous segment was our target sequence, save it
                             if in_target_sequence:
                                 sequence = ''.join(current_seq_lines)
                                 break
-                            # 检查这一行是否是我们要找的序列
+                            # Check if this line is the sequence we're looking for
                             in_target_sequence = (comp.name in line.replace('>', '').strip())
                             current_seq_lines = []
                         elif in_target_sequence:
                             current_seq_lines.append(line.strip())
                     
-                    # 处理最后一个序列
+                    # Handle the last sequence
                     if sequence is None and in_target_sequence:
                         sequence = ''.join(current_seq_lines)
                     
                     if sequence is None:
-                        raise ValueError(f"IDP component '{comp.name}': 未在 FASTA 中找到序列")
+                        raise ValueError(f"IDP component '{comp.name}': Sequence not found in FASTA")
                     
-                    # 使用 build_straight_CA_chain 从序列构建直的 CA 链
+                    # Use build_straight_CA_chain to build straight CA chain from sequence
                     from CondenSimAdapter.extern.ms2_openabc.utils.helper_functions import build_straight_CA_chain, write_pdb
                     import os
                     
-                    # 创建临时 PDB 文件
+                    # Create temporary PDB file
                     temp_pdb = os.path.join(self.output_dir, f'_temp_idp_{comp.name}_ca.pdb')
                     ca_atoms = build_straight_CA_chain(sequence, r0=0.38)
                     write_pdb(ca_atoms, temp_pdb)
                     
-                    # 使用临时 PDB 创建 HPSParser
+                    # Create HPSParser using temporary PDB
                     parser = HPSParser(
                         ca_pdb=temp_pdb,
                         fdomains=None
@@ -1900,40 +1968,40 @@ Output Files:
                     parsers.append((comp, parser))
             
             if not parsers:
-                raise ValueError("没有有效的 component")
+                raise ValueError("No valid components")
 
-            # ===== 3. 构建 HPSModel =====
-            print("\n  构建 HPSModel...")
+            # ===== 3. Build HPSModel =====
+            print("\n  Building HPSModel...")
             model = HPSModel()
             
-            # 设置周期性边界 (所有拓扑类型都是周期性的)
+            # Set periodic boundary conditions (all topology types are periodic)
             is_periodic = True
             model.use_pbc = is_periodic
             
-            # 添加所有分子（考虑每个 component 的 nmol）
+            # Add all molecules (considering each component's nmol)
             for comp, parser in parsers:
                 n_before = len(model.atoms) if model.atoms is not None else 0
-                # 为每个 component 添加 nmol 个分子
+                # Add nmol copies for each component
                 for _ in range(comp.nmol):
                     model.append_mol(parser)
                 n_after = len(model.atoms)
                 print(f"    {comp.name}: added {comp.nmol} copies, {n_after - n_before} total atoms")
 
-            # ===== 4. 创建 Topology 和 System =====
-            print("\n  创建 Topology 和 System...")
+            # ===== 4. Create Topology and System =====
+            print("\n  Creating Topology and System...")
             
-            # 创建 HPS 输出子目录（用于存放临时文件和输出文件）
+            # Create HPS output subdirectory (for temp files and output files)
             hps_output_dir = os.path.join(self.output_dir, 'HPS')
             os.makedirs(hps_output_dir, exist_ok=True)
             
-            # 从 model.atoms 创建临时 PDB，然后读取创建 topology（放在 HPS 子目录中）
+            # Create temp PDB from model.atoms, then read to create topology (in HPS subdirectory)
             temp_pdb = os.path.join(hps_output_dir, '_temp_hps_model.pdb')
             model.atoms_to_pdb(temp_pdb, reset_serial=True)
             topology = PDBFile(temp_pdb).topology
             
-            # 创建 OpenMM System
+            # Create OpenMM System
             box_size = self.config.box
-            is_periodic = True  # 所有拓扑类型都是周期性的
+            is_periodic = True  # All topology types are periodic
             model.create_system(
                 top=topology,
                 use_pbc=is_periodic,
@@ -1943,14 +2011,14 @@ Output Files:
             )
             print(f"    ✓ System created: {model.system.getNumParticles()} particles")
             
-            # ===== 5. 添加力场 =====
-            print("\n  添加力场...")
+            # ===== 5. Add Force Field =====
+            print("\n  Adding Force Field...")
             
-            # 蛋白键 (Harmonic)
+            # Protein bonds (Harmonic)
             print("    - Protein bonds (harmonic)")
             model.add_protein_bonds(force_group=1)
             
-            # 非键接触 (Ashbaugh-Hatch with Urry scale)
+            # Non-bonded contacts (Ashbaugh-Hatch with Urry scale)
             print("    - Contacts (Ashbaugh-Hatch, Urry scale)")
             model.add_contacts(
                 hydropathy_scale='Urry',
@@ -1960,7 +2028,7 @@ Output Files:
                 force_group=2
             )
             
-            # 静电 (Debye-Hückel)
+            # Electrostatics (Debye-Hückel)
             print("    - Electrostatics (Debye-Hückel)")
             model.add_dh_elec(
                 ldby=1 * unit.nanometer,
@@ -1969,7 +2037,7 @@ Output Files:
                 force_group=3
             )
             
-            # 弹性网络 (如果有 MDP)
+            # Elastic network (for MDP)
             has_enm = any(p[1].enm_pairs for p in parsers)
             if has_enm:
                 print("    - Elastic network (for folded domains)")
@@ -1978,33 +2046,44 @@ Output Files:
                     force_group=4
                 )
 
-            # ===== 6. 创建 OpenMM Simulation =====
-            print("\n  创建 OpenMM Simulation...")
+            # ===== 6. Create OpenMM Simulation =====
+            print("\n  Creating OpenMM Simulation...")
             
             system = model.system
             
-            # 从 CALVADOS 预平衡结构读取初始坐标（与 COCOMO 模式一致）
+            if _is_droplet_topology(self.config.topol):
+                radius, center = _get_droplet_params(self.config)
+                system = add_droplet_force(
+                    system=system,
+                    radius=radius,
+                    center=center,
+                    k=DROPLET_FORCE_K,
+                    stride=DROPLET_FORCE_STRIDE,
+                )
+                print(f"  Droplet confinement enabled (k={DROPLET_FORCE_K}, stride={DROPLET_FORCE_STRIDE})")
+            
+            # Read initial coordinates from CALVADOS pre-equilibration structure (consistent with COCOMO mode)
             if preequil_pdb and os.path.exists(preequil_pdb):
-                print(f"  从预平衡结构读取初始坐标: {preequil_pdb}")
+                print(f"  Reading initial coordinates from pre-equilibration structure: {preequil_pdb}")
                 pdb = PDBFile(preequil_pdb)
                 positions = pdb.getPositions(asNumpy=True)
                 
-                # 验证坐标数量是否匹配
+                # Verify coordinate count matches
                 if len(positions) != len(model.atoms):
-                    print(f"  ⚠️  警告: 预平衡结构原子数 ({len(positions)}) 与模型原子数 ({len(model.atoms)}) 不匹配")
-                    print(f"  从临时 PDB 读取坐标")
+                    print(f"  ⚠️  Warning: Pre-equilibration structure atom count ({len(positions)}) does not match model atom count ({len(model.atoms)})")
+                    print(f"  Reading coordinates from temporary PDB")
                     positions = PDBFile(temp_pdb).getPositions(asNumpy=True)
                 else:
-                    print(f"  ✓ 坐标数量匹配: {len(positions)} 原子")
+                    print(f"  ✓ Coordinate count matches: {len(positions)} atoms")
             else:
-                print(f"  ⚠️  未找到预平衡结构，从临时 PDB 读取坐标")
+                print(f"  ⚠️  Pre-equilibration structure not found, reading coordinates from temporary PDB")
                 positions = PDBFile(temp_pdb).getPositions(asNumpy=True)
 
-            # 选择平台
+            # Select platform
             config_platform = self.config.simulation.platform
             platform_name = config_platform.value if hasattr(config_platform, 'value') else str(config_platform)
             
-            # 尝试 GPU，如果不可用则回退到 CPU
+            # Try GPU, fall back to CPU if unavailable
             if gpu_id >= 0:
                 for pname in [platform_name, 'CUDA', 'OpenCL']:
                     try:
@@ -2023,7 +2102,7 @@ Output Files:
                 properties = {}
                 print(f"    Platform: CPU")
 
-            # 创建积分器
+            # Create integrator
             temperature = self.config.temperature
             integrator = LangevinMiddleIntegrator(
                 temperature * kelvin,
@@ -2039,10 +2118,10 @@ Output Files:
                 platformProperties=properties
             )
 
-            # 设置初始坐标
+            # Set initial positions
             simulation.context.setPositions(positions)
 
-            # 设置盒子向量
+            # Set box vectors
             if is_periodic:
                 box_size = self.config.box
                 box_vecs = [
@@ -2052,16 +2131,16 @@ Output Files:
                 ] * unit.nanometer
                 simulation.context.setPeriodicBoxVectors(*box_vecs)
 
-            # 能量最小化
+            # Energy minimization
             print("  Energy minimization...")
             simulation.minimizeEnergy()
             print("  Energy minimization completed")
             simulation.context.setVelocitiesToTemperature(temperature * kelvin)
 
-            # ===== 6. 运行模拟 =====
+            # ===== 6. Run simulation =====
             print(f"\n  Running HPS simulation: {self.config.simulation.steps} steps...")
             
-            # 添加报告器（使用之前创建的 HPS 输出目录）
+            # Add reporters (using HPS output directory created earlier)
             output_dir = hps_output_dir
             
             wfreq = self.config.simulation.wfreq
@@ -2080,7 +2159,7 @@ Output Files:
                 volume=True,
             ))
 
-            # 进度条
+            # Progress bar
             from tqdm import tqdm
             total_steps = self.config.simulation.steps
             batch_size = 1000
@@ -2090,10 +2169,10 @@ Output Files:
 
             print("  Simulation completed!")
 
-            # ===== 7. 保存结果 =====
-            print("\n  保存结果...")
+            # ===== 7. Save results =====
+            print("\n  Saving results...")
             
-            # 最终结构
+            # Final structure
             state_final = simulation.context.getState(
                 getPositions=True,
                 getVelocities=True,
@@ -2103,7 +2182,7 @@ Output Files:
             )
             positions_final = state_final.getPositions()
             
-            # 获取盒子向量并设置到 topology（这样 PDB 会包含 PBC 信息）
+            # Get box vectors and set to topology (so PDB will contain PBC info)
             box_vectors = state_final.getPeriodicBoxVectors()
             simulation.topology.setPeriodicBoxVectors(box_vectors)
             
@@ -2113,8 +2192,8 @@ Output Files:
                 PDBFile.writeFile(topology, positions_final, f, keepIds=True)
             print(f"    - final_hps_format.pdb")
 
-            # 后处理：将 HPS 格式的 PDB 转换为 calvados 格式（chain/resSeq 统一）
-            print(f"\n  后处理 PDB 格式转换（HPS -> Calvados）...")
+            # Post-processing: Convert HPS format PDB to calvados format (chain/resSeq unified)
+            print(f"\n  Post-processing PDB format conversion (HPS -> Calvados)...")
             try:
                 from .backmap import standardize_pdb_with_calvados
                 standardize_pdb_with_calvados(
@@ -2122,27 +2201,27 @@ Output Files:
                     config=self.config,
                     output_pdb=final_pdb
                 )
-                print(f"  ✓ PDB 格式转换完成: {final_pdb}")
+                print(f"  ✓ PDB format conversion completed: {final_pdb}")
             except Exception as e:
-                print(f"  ⚠️  PDB 格式转换失败: {e}")
-                print(f"  保留原始 HPS 格式的 PDB: {final_pdb_hps_format}")
+                print(f"  ⚠️  PDB format conversion failed: {e}")
+                print(f"  Keeping original HPS format PDB: {final_pdb_hps_format}")
                 shutil.copy2(final_pdb_hps_format, final_pdb)
             
-            # 复制到根目录（output_dir 是 HPS/，需要复制到 TDP43_CTD_CG/）
+            # Copy to root directory (output_dir is HPS/, need to copy to TDP43_CTD_CG/)
             system_name = self.config.system_name
-            cg_root_dir = os.path.dirname(output_dir)  # output_dir 是 .../TDP43_CTD_CG/HPS，所以 dirname 是 TDP43_CTD_CG
+            cg_root_dir = os.path.dirname(output_dir)  # output_dir is .../TDP43_CTD_CG/HPS, so dirname is TDP43_CTD_CG
             final_pdb_root = os.path.join(cg_root_dir, 'final.pdb')
             os.makedirs(cg_root_dir, exist_ok=True)
             shutil.copy2(final_pdb, final_pdb_root)
-            print(f"  复制最终结构到: {final_pdb_root}")
+            print(f"  Copied final structure to: {final_pdb_root}")
 
-            # 保存系统 XML
+            # Save system XML
             system_xml = os.path.join(output_dir, 'system.xml')
             with open(system_xml, 'w') as f:
                 f.write(XmlSerializer.serialize(system))
             print(f"    - system.xml")
 
-            # 保存 checkpoint
+            # Save checkpoint
             checkpoint_file = os.path.join(output_dir, 'restart.chk')
             simulation.saveCheckpoint(checkpoint_file)
             print(f"    - restart.chk")
@@ -2152,7 +2231,7 @@ Output Files:
             result.structure = final_pdb
             result.output_dir = output_dir
             
-            print(f"\n  HPS-Urry 输出目录: {output_dir}")
+            print(f"\n  HPS-Urry output directory: {output_dir}")
 
         except ImportError as e:
             result.success = False
@@ -2175,31 +2254,31 @@ Output Files:
 
     def run_moff(self, gpu_id: int = 0, **kwargs) -> SimulationResult:
         """
-        运行 MOFF 模拟
+        Run MOFF simulation
 
-        自动进行预平衡（使用 CALVADOS 构建初始结构）：
-        1. 用 CALVADOS 力场构建初始 CG 结构
-        2. 对 MDP 蛋白进行短时间模拟
-        3. 然后切换到 MOFF 力场进行正式模拟
+        Automatically perform pre-equilibration (Using CALVADOS to Build Initial Structure):
+        1. Build initial CG structure using CALVADOS force field
+        2. Run short simulation for MDP protein
+        3. Then switch to MOFF force field for formal simulation
 
-        使用 OpenABC 包的 MOFF 力场。
+        Uses MOFF force field from OpenABC package.
 
-        预平衡参数（硬编码，可通过 kwargs 覆盖）：
-        - steps: 预平衡步数（默认 100000）
-        - mapping: 映射方式 'ca' 或 'com'（默认 'ca'）
-        - k_restraint: 约束力常数（默认 10000.0）
-        - use_com: 是否使用 COM 约束（默认 True）
-        - platform: 计算平台（默认从 config 读取，CUDA）
+        Pre-equilibration parameters (hardcoded, can be overridden via kwargs):
+        - steps: Pre-equilibration steps (default 100000)
+        - mapping: Mapping method 'ca' or 'com' (default 'ca')
+        - k_restraint: Restraint force constant (default 10000.0)
+        - use_com: Whether to use COM restraint (default True)
+        - platform: Computing platform (default from config, CUDA)
 
         Args:
-            gpu_id: GPU 设备 ID
-            **kwargs: 额外参数
-                - salt_conc: 盐浓度（默认 150 mM）
-                - preequil_steps: 预平衡步数
-                - preequil_mapping: 预平衡映射方式 ('ca' 或 'com')
-                - preequil_k_restraint: 预平衡约束力常数
-                - preequil_use_com: 预平衡是否使用 COM 约束
-                - preequil_platform: 预平衡平台（CUDA 或 CPU）
+            gpu_id: GPU device ID
+            **kwargs: Additional parameters
+                - salt_conc: Salt concentration (default 150 mM)
+                - preequil_steps: Pre-equilibration steps
+                - preequil_mapping: Pre-equilibration mapping method ('ca' or 'com')
+                - preequil_k_restraint: Pre-equilibration restraint force constant
+                - preequil_use_com: Pre-equilibration whether to use COM restraint
+                - preequil_platform: Pre-equilibration platform (CUDA or CPU)
 
         Returns:
             SimulationResult
@@ -2207,15 +2286,15 @@ Output Files:
         self._ensure_setup()
         self._ensure_not_running()
 
-        # 预平衡参数（硬编码，可覆盖）
+        # Pre-equilibration parameters (hardcoded, can be overridden)
         preequil_steps = kwargs.get('preequil_steps', 100000)
         preequil_mapping = kwargs.get('preequil_mapping', 'ca')
         preequil_k_restraint = kwargs.get('preequil_k_restraint', 10000.0)
         preequil_use_com = kwargs.get('preequil_use_com', True)
-        # 预平衡平台：优先使用 kwargs 中指定的值，否则使用 config 中的设置（默认为 CUDA）
+        # Pre-equilibration platform: prefer value from kwargs, otherwise use config (default CUDA)
         preequil_platform = kwargs.get('preequil_platform', self.config.simulation.platform)
 
-        # 预平衡（使用 CALVADOS 构建初始结构）
+        # Pre-equilibration (Using CALVADOS to Build Initial Structure)
         preequil_pdb = self._run_pre_equilibration(
             gpu_id=gpu_id,
             steps=preequil_steps,
@@ -2225,7 +2304,7 @@ Output Files:
             platform=preequil_platform,
         )
         if preequil_pdb:
-            print(f"  [MOFF] 使用预平衡结构: {preequil_pdb}")
+            print(f"  [MOFF] Using pre-equilibration structure: {preequil_pdb}")
 
         self.is_running = True
         result = SimulationResult()
@@ -2235,8 +2314,8 @@ Output Files:
             print(f"\n[MOFF] Running simulation...")
             print(f"  GPU ID: {gpu_id}")
 
-            # TODO: 实现 MOFF runner
-            # 需要使用 openabc.forcefields.MOFFModel
+            # TODO: Implement MOFF runner
+            # Need to use openabc.forcefields.MOFFModel
 
             result.success = True
             print(f"  ✓ MOFF simulation completed (placeholder)")
@@ -2254,35 +2333,35 @@ Output Files:
     
     def run_cocomo(self, gpu_id: int = 0, **kwargs) -> SimulationResult:
         """
-        运行 COCOMO 模拟
+        Run COCOMO simulation
 
-        自动进行预平衡（使用 CALVADOS 构建初始结构）：
-        1. 用 CALVADOS 力场构建初始 CG 结构
-        2. 对 MDP 蛋白进行短时间模拟
-        3. 然后切换到 COCOMO 力场进行正式模拟
+        Automatically perform pre-equilibration (Using CALVADOS to Build Initial Structure):
+        1. Build initial CG structure using CALVADOS force field
+        2. Run short simulation for MDP protein
+        3. Then switch to COCOMO force field for formal simulation
 
-        COCOMO 使用 COCOMO2 力场，默认启用 SASA 修正。
-        离子强度固定为 0.1 M（力场默认值）。
+        COCOMO uses COCOMO2 force field with SASA correction enabled by default.
+        Ionic strength is fixed at 0.1 M (force field default value).
 
-        预平衡参数（硬编码，可通过 kwargs 覆盖）：
-        - steps: 预平衡步数（默认 100000）
-        - mapping: 映射方式 'ca' 或 'com'（默认 'ca'）
-        - k_restraint: 约束力常数（默认 10000.0）
-        - use_com: 是否使用 COM 约束（默认 True）
-        - platform: 计算平台（默认从 config 读取，CUDA）
+        Pre-equilibration parameters (hardcoded, can be overridden via kwargs):
+        - steps: Pre-equilibration steps (default 100000)
+        - mapping: Mapping method 'ca' or 'com' (default 'ca')
+        - k_restraint: Restraint force constant (default 10000.0)
+        - use_com: Whether to use COM restraint (default True)
+        - platform: Computing platform (default from config, CUDA)
 
         Args:
-            gpu_id: GPU 设备 ID
-            **kwargs: 额外参数
-                - nstep: 模拟步数（覆盖配置中的值）
-                - wfreq: 写入频率
-                - tstep: 时间步长（ps，默认 0.01）
-                - gamma: 摩擦系数（1/ps，默认 0.01）
-                - preequil_steps: 预平衡步数
-                - preequil_mapping: 预平衡映射方式 ('ca' 或 'com')
-                - preequil_k_restraint: 预平衡约束力常数
-                - preequil_use_com: 预平衡是否使用 COM 约束
-                - preequil_platform: 预平衡平台（CUDA 或 CPU）
+            gpu_id: GPU device ID
+            **kwargs: Additional parameters
+                - nstep: Simulation steps (override config value)
+                - wfreq: Write frequency
+                - tstep: Time step (ps, default 0.01)
+                - gamma: Friction coefficient (1/ps, default 0.01)
+                - preequil_steps: Pre-equilibration steps
+                - preequil_mapping: Pre-equilibration mapping method ('ca' or 'com')
+                - preequil_k_restraint: Pre-equilibration restraint force constant
+                - preequil_use_com: Pre-equilibration whether to use COM restraint
+                - preequil_platform: Pre-equilibration platform (CUDA or CPU)
 
         Returns:
             SimulationResult
@@ -2300,15 +2379,15 @@ Output Files:
                 UserWarning
             )
 
-        # 预平衡参数（硬编码，可覆盖）
+        # Pre-equilibration parameters (hardcoded, can be overridden)
         preequil_steps = kwargs.get('preequil_steps', 100000)
         preequil_mapping = kwargs.get('preequil_mapping', 'ca')
         preequil_k_restraint = kwargs.get('preequil_k_restraint', 10000.0)
         preequil_use_com = kwargs.get('preequil_use_com', True)
-        # 预平衡平台：优先使用 kwargs 中指定的值，否则使用 config 中的设置（默认为 CUDA）
+        # Pre-equilibration platform: prefer value from kwargs, otherwise use config (default CUDA)
         preequil_platform = kwargs.get('preequil_platform', self.config.simulation.platform)
 
-        # 预平衡（使用 CALVADOS 构建初始结构）
+        # Pre-equilibration (Using CALVADOS to Build Initial Structure)
         preequil_pdb = self._run_pre_equilibration(
             gpu_id=gpu_id,
             steps=preequil_steps,
@@ -2318,7 +2397,7 @@ Output Files:
             platform=preequil_platform,
         )
 
-        # 准备输出目录
+        # Prepare output directory
         dirs = self._prepare_cocomo_output()
         output_dir = dirs['output_dir']
 
@@ -2327,12 +2406,12 @@ Output Files:
 
         try:
             print(f"\n[COCOMO] Running COCOMO2 simulation...")
-            print(f"  预平衡结构: {preequil_pdb}")
+            print(f"  Pre-equilibration structure: {preequil_pdb}")
 
-            # 使用新的 COCOMO 类运行模拟
+            # Run simulation using new COCOMO class
             from .cocomo2_creator import COCOMO
 
-            # 构建 topology_info 字典
+            # Build topology_info dictionary
             topology_info = {
                 'global_sequence': self.get_global_sequence(),
                 'chain_ids': self.get_chain_ids(),
@@ -2341,21 +2420,21 @@ Output Files:
                 'local_residue_indices': list(range(1, len(self.get_global_sequence()) + 1)),
             }
 
-            # 读取预平衡结构的坐标
+            # Read pre-equilibration structure coordinates
             from openmm.app import PDBFile
             pdb = PDBFile(preequil_pdb)
             positions = pdb.getPositions(asNumpy=True)
 
-            # 获取 box size（使用 config 中的 box 参数，单位为 nm）
+            # Get box size (use config box parameter, in nm)
             box_size = self.config.box
 
-            # 获取 SASA 值
+            # Get SASA values
             sasa_values = self._get_sasa_values()
 
             if sasa_values is not None:
                 topology_info['sasa_values'] = sasa_values
 
-            # 创建 COCOMO 系统
+            # Create COCOMO system
             cocomo = COCOMO(
                 box_size=box_size,
                 topology_info=topology_info,
@@ -2364,8 +2443,8 @@ Output Files:
                 resources='CUDA' if gpu_id >= 0 else 'CPU'
             )
 
-            # 设置 _topology_info 以便 ENM 计算使用
-            # 使用 SimpleNamespace 创建带有属性的对象
+            # Set _topology_info for ENM calculation
+            # Use SimpleNamespace to create object with attributes
             from types import SimpleNamespace
             cocomo._topology_info = SimpleNamespace(
                 global_sequence=topology_info['global_sequence'],
@@ -2374,43 +2453,54 @@ Output Files:
                 sasa_values=topology_info.get('sasa_values', [])
             )
 
-            # 创建 OpenMM 系统
+            # Create OpenMM system
             system, topology = cocomo.create_system()
+            
+            if _is_droplet_topology(self.config.topol):
+                radius, center = _get_droplet_params(self.config)
+                system = add_droplet_force(
+                    system=system,
+                    radius=radius,
+                    center=center,
+                    k=DROPLET_FORCE_K,
+                    stride=DROPLET_FORCE_STRIDE,
+                )
+                print(f"  Droplet confinement enabled (k={DROPLET_FORCE_K}, stride={DROPLET_FORCE_STRIDE})")
 
-            # 创建 Simulation 对象 (优先使用config指定的platform)
+            # Create Simulation object (prefer platform specified in config)
             config_platform = self.config.simulation.platform
             platform_name = config_platform.value if hasattr(config_platform, 'value') else str(config_platform)
             
-            # 平台选择：优先使用config指定的平台，支持自动回退
+            # Platform selection: prefer config-specified platform, support automatic fallback
             if gpu_id >= 0:
-                # 用户想要使用GPU
+                # User wants to use GPU
                 try:
                     platform = Platform.getPlatformByName(platform_name)
                     properties = {'DeviceIndex': str(gpu_id)}
-                    print(f"  使用 {platform_name} 平台")
+                    print(f"  Using {platform_name} platform")
                 except Exception:
-                    # 尝试其他GPU平台
+                    # Try other GPU platforms
                     for fallback in ['CUDA', 'OpenCL']:
                         if fallback != platform_name:
                             try:
                                 platform = Platform.getPlatformByName(fallback)
                                 properties = {'DeviceIndex': str(gpu_id)}
-                                print(f"  {platform_name} 不可用，回退到 {fallback}")
+                                print(f"  {platform_name} unavailable, falling back to {fallback}")
                                 break
                             except:
                                 continue
                     else:
-                        print(f"  GPU 不可用，回退到 CPU")
+                        print(f"  GPU unavailable, falling back to CPU")
                         platform = Platform.getPlatformByName('CPU')
                         properties = {}
             else:
-                # 用户想要使用CPU
+                # User wants to use CPU
                 platform = Platform.getPlatformByName('CPU')
                 properties = {}
-                print("  使用 CPU 平台")
+                print("  Using CPU platform")
 
-            # 使用 LangevinIntegrator（与 Legacy 版本一致）
-            # 温度从 config 读取，摩擦系数 0.01/ps，时间步长 0.01 ps
+            # Use LangevinIntegrator (consistent with Legacy version)
+            # Temperature from config, friction coefficient 0.01/ps, time step 0.01 ps
             temperature = self.config.temperature
             integrator = LangevinIntegrator(
                 temperature * kelvin,
@@ -2426,23 +2516,23 @@ Output Files:
                 platformProperties=properties
             )
 
-            # 设置初始坐标
+            # Set initial positions
             simulation.context.setPositions(positions)
 
-            # 设置初始速度（与 Legacy 版本一致）
+            # Set initial velocities (consistent with Legacy version)
             simulation.context.setVelocitiesToTemperature(temperature * kelvin)
 
-            # 能量最小化
+            # Energy minimization
             print("  Running energy minimization...")
             simulation.minimizeEnergy()
             print("  Energy minimization completed")
 
-            # 运行模拟
+            # Run simulation
             wfreq = self.config.simulation.wfreq
             xtc_file = os.path.join(output_dir, 'trajectory.xtc')
             log_file = os.path.join(output_dir, 'simulation.log')
 
-            # 添加报告器（使用 mdtraj 的 XTCReporter 保留 PBC 信息）
+            # Add reporters (use mdtraj's XTCReporter to preserve PBC info)
             simulation.reporters.append(
                 XTCReporter(xtc_file, wfreq)
             )
@@ -2459,9 +2549,9 @@ Output Files:
                 )
             )
 
-            # 运行模拟（使用 tqdm 显示进度）
+            # Run simulation (use tqdm to show progress)
             total_steps = self.config.simulation.steps
-            print(f"  开始模拟: {total_steps} 步")
+            print(f"  Starting simulation: {total_steps} steps")
 
             from tqdm import tqdm
             n_batches = 10
@@ -2471,30 +2561,30 @@ Output Files:
                 simulation.step(batch_size)
                 simulation.saveCheckpoint(os.path.join(output_dir, 'restart.chk'))
 
-            # 处理剩余步数
+            # Handle remaining steps
             remaining = total_steps % n_batches
             if remaining > 0:
                 simulation.step(remaining)
 
-            print(f"  模拟完成!")
+            print(f"  Simulation completed!")
 
-            # 获取最终状态（包含 PBC 信息）
+            # Get final state (contains PBC info)
             state_final = simulation.context.getState(
                 getPositions=True,
                 getVelocities=True,
                 getForces=True,
                 getEnergy=True,
-                enforcePeriodicBox=True  # 强制周期边界条件
+                enforcePeriodicBox=True  # Force periodic boundary conditions
             )
 
-            # 获取最终的位置和盒子向量
+            # Get final positions and box vectors
             positions_final = state_final.getPositions()
             box_vectors = state_final.getPeriodicBoxVectors()
 
-            # 在拓扑上设置盒子向量（这样 PDB 会包含 PBC 信息）
+            # Set box vectors on topology (so PDB will contain PBC info)
             simulation.topology.setPeriodicBoxVectors(box_vectors)
 
-            # 保存最终结构为 PDB 格式（包含 PBC）
+            # Save final structure as PDB format (contains PBC)
             from openmm.app import PDBFile
             final_pdb = os.path.join(output_dir, 'final.pdb')
             with open(final_pdb, 'w') as f:
@@ -2503,22 +2593,22 @@ Output Files:
                     positions_final,
                     f
                 )
-            print(f"  保存最终结构: {final_pdb}")
+            print(f"  Saved final structure: {final_pdb}")
 
-            # final.pdb 已经在根目录（output_dir = self.output_dir = {system_name}_CG），无需复制
+            # final.pdb is already in root directory (output_dir = self.output_dir = {system_name}_CG), no need to copy
 
-            # 保存系统 XML
+            # Save system XML
             system_xml = os.path.join(output_dir, 'system.xml')
             with open(system_xml, 'w') as f:
                 f.write(XmlSerializer.serialize(system))
-            print(f"  保存系统 XML: {system_xml}")
+            print(f"  Saved system XML: {system_xml}")
 
             result.success = True
             result.trajectory = xtc_file
             result.structure = final_pdb
             result.output_dir = output_dir
 
-            print(f"  COCOMO 输出目录: {output_dir}")
+            print(f"  COCOMO output directory: {output_dir}")
 
         except Exception as e:
             result = SimulationResult()
@@ -2578,28 +2668,28 @@ Output Files:
 
     def run_mpipi_recharged(self, gpu_id: int = 0, return_system: bool = False, **kwargs) -> SimulationResult:
         """
-        运行 Mpipi-Recharged 模拟
+        Run Mpipi-Recharged simulation
 
-        使用与 test_100_molecules.py 相同的逻辑：
-        1. 创建 biomolecule 对象（MDP/IDP）
-        2. 使用 gmx insert-molecules 放置分子
-        3. 构建 Mpipi-Recharged 系统
-        4. 能量最小化
-        5. 运行 MD 模拟
+        Use the same logic as test_100_molecules.py:
+        1. Create biomolecule objects (MDP/IDP)
+        2. Use gmx insert-molecules to place molecules
+        3. Build Mpipi-Recharged system
+        4. Energy minimization
+        5. Run MD simulation
 
-        注意：可选使用 CALVADOS 预平衡生成初始结构。
+        Note: Optionally use CALVADOS pre-equilibration to generate initial structure.
 
         Args:
-            gpu_id: GPU 设备 ID
-            return_system: 如果为 True，返回 (system, topology, positions) 而不是运行模拟（默认 False）
-            **kwargs: 额外参数
-                - use_gmx_insert: 是否使用 gmx insert-molecules 放置分子（默认 True）
-                - gmx_radius: gmx insert-molecules 的最小距离（nm，默认 0.35）
-                - verbose: 是否输出详细信息（默认 True）
+            gpu_id: GPU device ID
+            return_system: If True, return (system, topology, positions) instead of running simulation (default False)
+            **kwargs: Additional parameters
+                - use_gmx_insert: Whether to use gmx insert-molecules to place molecules (default True)
+                - gmx_radius: Minimum distance for gmx insert-molecules (nm, default 0.35)
+                - verbose: Whether to output detailed information (default True)
 
         Returns:
-            SimulationResult (默认)
-            或 (system, topology, positions) 当 return_system=True 时
+            SimulationResult (default)
+            Or (system, topology, positions) when return_system=True
         """
         from openmm.app import PDBFile
         from openmm import Platform, LangevinMiddleIntegrator, Vec3, LocalEnergyMinimizer
@@ -2778,6 +2868,17 @@ Output Files:
                 )
             print(f"  ✓ 坐标数量匹配: {len(pre_positions)} 原子")
             positions = pre_positions
+            
+            if _is_droplet_topology(self.config.topol):
+                radius, center = _get_droplet_params(self.config)
+                system = add_droplet_force(
+                    system=system,
+                    radius=radius,
+                    center=center,
+                    k=DROPLET_FORCE_K,
+                    stride=DROPLET_FORCE_STRIDE,
+                )
+                print(f"  Droplet confinement enabled (k={DROPLET_FORCE_K}, stride={DROPLET_FORCE_STRIDE})")
 
             # 如果只需要返回 system，不运行模拟
             if return_system:

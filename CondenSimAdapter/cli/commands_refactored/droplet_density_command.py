@@ -24,8 +24,8 @@ from ...src import CGSimulationConfig
 @click.option(
     '--radius', '-r',
     type=float,
-    required=True,
-    help='Droplet radius in nm'
+    required=False,
+    help='Droplet radius in nm (defaults to value in YAML if present)'
 )
 @click.option(
     '--nmol', '-n',
@@ -34,34 +34,28 @@ from ...src import CGSimulationConfig
     required=False,
     help='Number of molecules for each component (space-separated, e.g., -n "10 20")'
 )
-@click.option(
-    '--verbose', '-v',
-    is_flag=True,
-    help='Show detailed calculation'
-)
 @click.argument('extra_nmol', nargs=-1, type=str, required=False)
-def droplet_density_command(input_file: str, radius: float, nmol: str, verbose: bool, extra_nmol: tuple):
+def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmol: tuple):
     """\b
     Estimate protein density in a droplet geometry.
 
     \b
     Calculates the protein concentration (mg/mL) based on:
         - Configuration YAML (components, sequences, residue counts)
-        - Provided droplet radius
+        - Droplet radius (from -r or YAML)
         - Optional: number of molecules per component (-n flag)
 
     \b
     Use -n to specify molecule counts and calculate achievable density.
-    Example: adapter droplet-density -f config.yaml -r 15 -n 100 200
+    Example: adapter droplet-density -f config.yaml -n 100 200
 
     \b
     Warnings are issued if density is below 300 mg/mL or above 800 mg/mL.
 
     \b
     Examples:
-        adapter droplet-density -f config.yaml -r 15
+        adapter droplet-density -f config.yaml
         adapter droplet-density -f config.yaml -r 20 -n 10 20
-        adapter droplet-density -f config.yaml -r 20 --verbose
     """
     # Combine -n value with extra positional arguments
     nmol_values = None
@@ -88,6 +82,31 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, verbose: 
         config = CGSimulationConfig.from_yaml(input_file)
     except Exception as e:
         click.echo(f"  ✗ Failed to load configuration: {e}")
+        sys.exit(1)
+
+    # Resolve radius if not provided: prefer YAML radius, fallback to box/2 for droplet
+    if radius is None:
+        radius_from_yaml = None
+        try:
+            import yaml
+            with open(input_file, 'r') as f:
+                data = yaml.safe_load(f)
+            if isinstance(data, dict):
+                radius_from_yaml = data.get('radius')
+        except Exception:
+            radius_from_yaml = None
+
+        if radius_from_yaml is not None:
+            radius = float(radius_from_yaml)
+        else:
+            try:
+                if config.box and len(config.box) >= 1:
+                    radius = float(config.box[0]) / 2.0
+            except Exception:
+                radius = None
+
+    if radius is None:
+        click.echo("  ✗ Error: Missing droplet radius. Provide -r or set radius in YAML.", err=True)
         sys.exit(1)
 
     # Validate -n flag if provided
@@ -291,17 +310,6 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, verbose: 
         click.echo(f"    Mass calculation: Estimated (avg {AVG_RESIDUE_MASS} Da/residue)")
     else:
         click.echo(f"    Mass calculation: Mixed ({exact_mass_count} exact, {estimated_mass_count} estimated)")
-
-    if verbose:
-        click.echo(f"\n  Component details:")
-        for comp_info in component_details:
-            nmol_str = "✓ user" if comp_info['nmol_source'] == 'user' else "≈ config"
-            method_str = "✓ exact" if comp_info['mass_method'] == 'exact' else "≈ estimated"
-            click.echo(f"    - {comp_info['name']} ({comp_info['type'].upper()}):")
-            click.echo(f"        Molecules: {comp_info['nmol']} ({nmol_str})")
-            click.echo(f"        Residues/molecule: {comp_info['nres']}")
-            click.echo(f"        Mass/molecule: {comp_info['mass_per_mol']:.2f} Da ({method_str})")
-            click.echo(f"        Total mass: {comp_info['total_mass']:.2f} Da")
 
     click.echo(f"\n  Density:")
     click.echo(f"    {density_mgmL:.1f} mg/mL (g/L)")

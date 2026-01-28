@@ -123,6 +123,19 @@ def _print_help(ctx, param, value):
     help='Use pdb2gmx -his to set all histidines: 0=HID, 1=HIE. Only use if '
          'normal runs fail with atom-count mismatch errors; this may allow the build to complete.',
 )
+@optgroup.group('DROPLET SETTINGS')
+@optgroup.option(
+    '--droplet-box-type', '-bt',
+    type=click.Choice(['dodecahedron', 'cubic', 'octahedron']),
+    default=None,
+    help='Box type for droplet simulation: dodecahedron, cubic, or octahedron.',
+)
+@optgroup.option(
+    '--droplet-distance', '-dd',
+    type=float,
+    default=None,
+    help='Distance between solute and box edge in nm. Required when --droplet-box-type is set.',
+)
 @optgroup.group('HELP')
 @optgroup.option(
     '-h', '--help',
@@ -132,7 +145,7 @@ def _print_help(ctx, param, value):
     callback=_print_help,
     help='Show this message and exit.',
 )
-def minimize_command(input, input_file, output, force_field, device, gpu_id, level, tolerance, iter, salt_conc, cutoff, solvate, no_disulfide, his_type):
+def minimize_command(input, input_file, output, force_field, device, gpu_id, level, tolerance, iter, salt_conc, cutoff, solvate, no_disulfide, his_type, droplet_box_type, droplet_distance):
     """\b
     Energy minimization using AMBER/CHARMM force fields.
 
@@ -142,6 +155,9 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
         2. (Optional) If --solvate enabled:
            - Add water box and ions to minimize_final.pdb
            - Output: minimize_final_solvated.gro + topol.top
+        3. (Optional) If --droplet-box-type specified:
+           - Build solvent box using gmx editconf
+           - Output: minimize_final_box.gro
 
     \b
     Uses gromacs pdb2gmx for topology generation and multi-step OpenMM
@@ -175,6 +191,7 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
         adapter minimize -i TDP43_backmap -f config.yaml --gpu-id 1  # GPU 1
         adapter minimize -i TDP43_backmap -f config.yaml --solvate  # Explicit water
         adapter minimize -i TDP43_backmap -f config.yaml --solvate --salt-conc 0.2
+        adapter minimize -i TDP43_backmap -f config.yaml -bt dodecahedron -dd 2.0  # Build droplet box
     """
     from ...src.minimize import MinimizeSimulator, MinimizeConfig
     from ...src.pdb2gmx_utils import load_config_from_yaml
@@ -224,6 +241,13 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
     if his_type is not None:
         his_type_int = int(his_type)
         click.echo(f"  Histidine type: {'HID' if his_type_int == 0 else 'HIE'} (pdb2gmx -his)")
+    if droplet_box_type is not None:
+        click.echo(f"  Droplet box: Enabled")
+        click.echo(f"    Box type: {droplet_box_type}")
+        if droplet_distance is not None:
+            click.echo(f"    Distance: {droplet_distance} nm")
+        else:
+            click.echo(f"    Distance: 2.0 nm (default)")
 
     # Create minimize_config (GB model fixed to OBC2)
     minimize_config = MinimizeConfig(
@@ -238,7 +262,9 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
         solvate_enabled=solvate,
         ion_concentration=salt_conc,
         disable_disulfide=no_disulfide,
-        his_type=int(his_type) if his_type is not None else None
+        his_type=int(his_type) if his_type is not None else None,
+        droplet_box_type=droplet_box_type,
+        droplet_distance=droplet_distance if droplet_distance is not None else 2.0
     )
     minimize_config.set_optimization_mode(level)
 

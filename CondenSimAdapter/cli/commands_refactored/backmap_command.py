@@ -6,6 +6,7 @@ Backmaps CG structure to all-atom representation.
 """
 
 import sys
+from pathlib import Path
 
 import click
 
@@ -70,9 +71,9 @@ def backmap_command(input, input_file, output, model_type):
         click.echo(f"Error: Failed to load configuration file: {e}", err=True)
         sys.exit(1)
     
-    # If input is not provided, default to {system_name}_cg
+    # If input is not provided, default to {system_name}_CG
     if input is None:
-        input = f"{system_name}_cg"
+        input = f"{system_name}_CG"
     
     if not Path(input).exists():
         click.echo(f"Error: Input path '{input}' does not exist.", err=True)
@@ -98,17 +99,17 @@ def backmap_command(input, input_file, output, model_type):
     if model_type:
         click.echo(f"  Model: {model_type}")
     
-    # 创建 backmap config（CLI 参数优先）
+    # Create backmap config (CLI parameters take priority)
     backmap_config = BackmapConfig()
     if model_type and model_type != 'auto':
         backmap_config.model_type = model_type
     if output:
         backmap_config.output_dir = output
     
-    # 创建 simulator
+    # Create simulator
     simulator = BackmapSimulator(backmap_config=backmap_config)
     
-    # 执行 backmap（output_dir 参数会覆盖 backmap_config.output_dir）
+    # Execute backmap (output_dir parameter overrides backmap_config.output_dir)
     click.echo(f"\n[1/2] Preparing input...")
     try:
         result = simulator.run(input_path=input, config_path=input_file, output_dir=output)

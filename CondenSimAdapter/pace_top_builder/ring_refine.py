@@ -36,8 +36,8 @@ ring_distance_dict = {'HIS': {'ring': {'CD2-CE1': 2.1841,
                 'CE2-CG': 2.4077,
                 'CG-CZ': 2.7802}}}
 
-# 键角定义：atom1-atom2-atom3 的理想角度（度）
-# 六元环内角：120°，五元环内角：108°
+# Ring angle definitions: ideal angles for atom1-atom2-atom3 (degrees)
+# Six-membered ring internal angle: 120°, five-membered ring internal angle: 108°
 ring_angle_dict = {'HIS': {'ring': {
     'ND1-CE1-NE2': 108.0,
     'CE1-NE2-CD2': 108.0,
@@ -131,9 +131,9 @@ ring_dihedral_dict = {'HIS': {'CD2-CG-ND1-CE1': 0,
             'CG-CD1-CE1-CZ': 0,
             'CZ-CE2-CD2-CG': 0}}
 
-# 对角线距离限制字典：用于United-Atom模型中维持芳香环平面结构
-# 格式: {残基名: {环类型: {(原子对): (low, up1, up2, kdr)}}}
-# Type 10 (Distance Restraints): low与up1之间为零电势，up2后施加惩罚力常数kdr
+# Diagonal distance constraint dictionary: used to maintain aromatic ring planar structure in United-Atom model
+# Format: {residue_name: {ring_type: {(atom_pair): (low, up1, up2, kdr)}}}
+# Type 10 (Distance Restraints): zero potential between low and up1, penalty with force constant kdr after up2
 ring_diagonal_dict = {
     'PHE': {
         'ring': {
@@ -231,14 +231,14 @@ f.close()
 # atom1.nr atom2.nr atom3.nr atom4.nr 1 theta_dihedral force_constant 1 
 
 def find_atom_by_name(atoms, residue_name, atom_name):
-    """根据残基名和原子名查找原子"""
+    """Find atom by residue name and atom name"""
     for atom in atoms:
         if atom.residue == residue_name and atom.atom_name == atom_name:
             return atom
     return None
 
 def generate_ring_angles(atoms, residues, residue_names, force_constant):
-    """生成环状氨基酸的键角约束"""
+    """Generate ring angle constraints for cyclic amino acids"""
     angles = []
     
     for i, residue_name in enumerate(residue_names):
@@ -258,14 +258,14 @@ def generate_ring_angles(atoms, residues, residue_names, force_constant):
                             break
                     
                     if len(atoms_found) == 3:
-                        # 使用GROMACS的键角约束格式: atom1 atom2 atom3 1 theta force_constant
-                        # 力常数通常设为400 kJ/mol/rad^2
+                        # Use GROMACS angle constraint format: atom1 atom2 atom3 1 theta force_constant
+                        # Force constant typically set to 400 kJ/mol/rad^2
                         angles.append(f"{atoms_found[0].nr:5d} {atoms_found[1].nr:5d} {atoms_found[2].nr:5d} 1 {ideal_angle:8.2f} {force_constant:8.0f}")
     
     return angles
 
 def generate_ring_dihedrals(atoms, residues, residue_names, force_constant):
-    """生成环状氨基酸的二面角约束"""
+    """Generate ring dihedral constraints for cyclic amino acids"""
     dihedrals = []
     
     for i, residue_name in enumerate(residue_names):
@@ -285,18 +285,18 @@ def generate_ring_dihedrals(atoms, residues, residue_names, force_constant):
                             break
                     
                     if len(atoms_found) == 4:
-                        # 使用GROMACS的二面角约束格式: atom1 atom2 atom3 atom4 1 angle force_constant 1
-                        # 力常数通常设为1000 kJ/mol
+                        # Use GROMACS dihedral constraint format: atom1 atom2 atom3 atom4 1 angle force_constant 1
+                        # Force constant typically set to 1000 kJ/mol
                         dihedrals.append(f"{atoms_found[0].nr:5d} {atoms_found[1].nr:5d} {atoms_found[2].nr:5d} {atoms_found[3].nr:5d} 1 {angle:8.1f} {force_constant:8.0f} 1")
     
     return dihedrals
 
 def generate_ring_diagonals(atoms, residues, residue_names):
-    """生成环状氨基酸的对角线距离限制 (Type 10 Distance Restraints)
+    """Generate diagonal distance constraints for cyclic amino acids (Type 10 Distance Restraints)
     
-    用于United-Atom模型中维持芳香环平面结构:
-    - low与up1之间为零电势，允许自然热涨落
-    - 超过up1后施加力常数kdr的惩罚
+    Used to maintain aromatic ring planar structure in United-Atom model:
+    - Zero potential between low and up1, allowing natural thermal fluctuations
+    - Penalty with force constant kdr after up1
     """
     diagonals = []
     
@@ -311,27 +311,27 @@ def generate_ring_diagonals(atoms, residues, residue_names):
                     atom2 = find_atom_by_name(residue_atoms, residue_name, atom2_name)
                     
                     if atom1 and atom2:
-                        # 使用GROMACS的Type 10距离限制格式: atom1 atom2 10 low up1 up2 kdr
-                        # funct=10 表示Distance Restraints
+                        # Use GROMACS Type 10 distance constraint format: atom1 atom2 10 low up1 up2 kdr
+                        # funct=10 means Distance Restraints
                         diagonals.append(f"{atom1.nr:5d} {atom2.nr:5d} 10 {low:6.3f} {up1:6.3f} {up2:6.3f} {kdr:6.0f}")
     
     return diagonals
 
 def get_itp_lines(angles, dihedrals, diagonals=None):
-    """将键角约束、二面角约束和对角线距离限制写入itp文件
+    """Write angle constraints, dihedral constraints, and diagonal distance constraints to itp file
     
-    diagonals: 对角线距离限制列表 (Type 10 Distance Restraints)
+    diagonals: Diagonal distance constraint list (Type 10 Distance Restraints)
     
-    控制逻辑:
-    - -DRINGREFINE: 控制键角、二面角约束
-    - -DRINGREFINE_HEAVY: 控制对角线距离限制 (Type 10 Distance Restraints)
+    Control logic:
+    - -DRINGREFINE: Controls angle and dihedral constraints
+    - -DRINGREFINE_HEAVY: Controls diagonal distance constraints (Type 10 Distance Restraints)
     """
     if diagonals is None:
         diagonals = []
     
     alllines = []
     
-    # 对角线距离限制 - 由 RINGREFINE_HEAVY 控制
+    # Diagonal distance constraints - controlled by RINGREFINE_HEAVY
     if diagonals:
         alllines.append("#ifdef RINGREFINE_HEAVY")
         alllines.append("; Diagonal Distance Restraints for aromatic rings (Type 10)")
@@ -345,9 +345,9 @@ def get_itp_lines(angles, dihedrals, diagonals=None):
         for diagonal in diagonals:
             alllines.append(diagonal)
         alllines.append("#endif")
-        alllines.append("")  # 空行分隔
+        alllines.append("")  # Empty line for separation
     
-    # 键角、二面角约束 - 由 RINGREFINE 控制
+    # Angle and dihedral constraints - controlled by RINGREFINE
     alllines.append("#ifdef RINGREFINE")
     alllines.append("; Ring angle and dihedral constraints for aromatic amino acids")
     alllines.append("; Generated by ring_refine.py")
@@ -368,12 +368,13 @@ def get_itp_lines(angles, dihedrals, diagonals=None):
         
     alllines.append("#endif")
     return alllines
-# 主程序执行
+
+# Main program execution
 if __name__ == "__main__":
-    # 解析原子信息
+    # Parse atom information
     residues, residue_names = atoms_in_residue(atomlist, len(set(atom.resnr for atom in atomlist)))
     
-    # 生成环约束（键角、二面角、对角线距离限制）
+    # Generate ring constraints (angles, dihedrals, diagonal distance constraints)
     ring_angles = generate_ring_angles(atomlist, residues, residue_names, force_constant=400)
     ring_dihedrals = generate_ring_dihedrals(atomlist, residues, residue_names, force_constant=-50)
     ring_diagonals = generate_ring_diagonals(atomlist, residues, residue_names)

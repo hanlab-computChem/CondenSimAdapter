@@ -2,9 +2,9 @@
 """
 CALVADOS Wrapper
 
-将 CGSimulationConfig 转换为 ms2_calvados 格式并运行模拟。
+Convert CGSimulationConfig to ms2_calvados format and run simulation.
 
-拓扑映射：
+Topology mapping:
 - CUBIC → CALVADOS 'grid'
 - SLAB → CALVADOS 'slab'
 
@@ -32,43 +32,43 @@ from .cg import (
 
 class CalvadosWrapper:
     """
-    CALVADOS 模拟包装器
+    CALVADOS simulation wrapper
     
-    将 CGSimulationConfig 转换为 ms2_calvados 格式并运行。
+    Convert CGSimulationConfig to ms2_calvados format and run simulation.
     
     Attributes:
-        config: CGSimulationConfig 实例
-        output_dir: 输出目录
-        ms2_config: ms2_calvados Config 对象
-        ms2_components: ms2_calvados Components 对象
+        config: CGSimulationConfig instance
+        output_dir: Output directory
+        ms2_config: ms2_calvados Config object
+        ms2_components: ms2_calvados Components object
     """
     
     def __init__(self, config: CGSimulationConfig):
         """
-        初始化 wrapper
+        Initialize wrapper
         
         Args:
-            config: CGSimulationConfig 实例
+            config: CGSimulationConfig instance
         """
         self.config = config
         self.output_dir: Optional[str] = None
         
-        # 获取 residue 文件路径
+        # Get residue file path
         self._residues_path = self._get_residues_path()
     
     def _get_residues_path(self) -> str:
-        """获取 residue 参数文件路径
+        """Get residue parameter file path
         
-        Residues 文件从 ms2_calvados 包的 data 目录加载：
-        - residues_CALVADOS2.csv: 用于纯 IDP 系统
-        - residues_CALVADOS3.csv: 用于包含 MDP 的系统
+        Residues files are loaded from ms2_calvados package's data directory:
+        - residues_CALVADOS2.csv: For pure IDP systems
+        - residues_CALVADOS3.csv: For systems containing MDP
         """
         from CondenSimAdapter.extern.ms2_calvados.calvados import data as calvados_data
         
         has_mdp = any(c.type == ComponentType.MDP for c in self.config.components)
         residues_file = 'residues_CALVADOS3.csv' if has_mdp else 'residues_CALVADOS2.csv'
         
-        # calvados_data 是命名空间包，使用 __path__ 而不是 __file__
+        # calvados_data is a namespace package, use __path__ instead of __file__
         data_path = calvados_data.__path__[0]
         residues_path = Path(data_path) / residues_file
         
@@ -78,40 +78,61 @@ class CalvadosWrapper:
         return str(residues_path)
     
     def _topol_to_calvados(self) -> str:
-        """将 TopologyType 转换为 CALVADOS 拓扑字符串"""
+        """Convert TopologyType to CALVADOS topology string"""
         if self.config.topol == TopologyType.CUBIC:
             return 'grid'
         elif self.config.topol == TopologyType.SLAB:
             return 'slab'
+        elif self.config.topol == TopologyType.DROPLET:
+            return 'grid'
         else:
-            return 'grid'  # 默认
+            return 'grid'  # Default
+
+    def _is_droplet_topology(self) -> bool:
+        if isinstance(self.config.topol, TopologyType):
+            return self.config.topol == TopologyType.DROPLET
+        return str(self.config.topol).lower() == 'droplet'
+
+    def _get_droplet_params(self) -> tuple:
+        box = self.config.box
+        center = (box[0] / 2.0, box[1] / 2.0, box[2] / 2.0)
+        radius = self.config.droplet_radius if self.config.droplet_radius is not None else box[0] / 2.0
+        return radius, center
+
+    def _get_droplet_force_expr(self) -> str:
+        radius, center = self._get_droplet_params()
+        k = 1.0
+        return (
+            f"{k} * step(r - {radius}) * (r - {radius}); "
+            f"r = sqrt((x-{center[0]})^2 + (y-{center[1]})^2 + (z-{center[2]})^2)"
+        )
     
     def _platform_to_string(self) -> str:
-        """将 ComputePlatform 转换为字符串"""
+        """Convert ComputePlatform to string"""
         if isinstance(self.config.simulation.platform, ComputePlatform):
             return self.config.simulation.platform.value
         return str(self.config.simulation.platform)
     
     def create_config(self) -> 'ms2_config.Config':
-        """创建 ms2_calvados Config 对象
+        """Create ms2_calvados Config object
         
         Notes:
-            - 只传递用户需要修改的参数，让 Config 类使用 default_config.yaml 的默认值
-            - CALVADOS 的物理常量（eps_lj, cutoff_lj, friction_coeff 等）保持不变
-            - slab_width: SLAB 拓扑时自动计算为 box[2] / 2
+            - Only pass parameters that users need to modify, let Config class use default_config.yaml defaults
+            - CALVADOS physical constants (eps_lj, cutoff_lj, friction_coeff, etc.) remain unchanged
+            - slab_width: Automatically calculated as box[2] / 2 for SLAB topology
         """
         from CondenSimAdapter.extern.ms2_calvados.calvados.cfg import Config
         
         sim_params = self.config.simulation
         
-        # SLAB 拓扑：自动计算 slab_width = box_z / 2
-        # 其他拓扑：使用 CALVADOS 默认值（100）
+        # SLAB topology: automatically calculate slab_width = box_z / 2
+        # Other topologies: use CALVADOS default (100)
         if self.config.topol.value == 'slab':
             slab_width = self.config.box[2] / 2
         else:
-            slab_width = None  # 使用 CALVADOS 默认值
+            slab_width = None  # Use CALVADOS default
         
-        # 只传递用户实际配置的参数
+        # Only pass parameters that users actually configured
         params = {
             'sysname': self.config.system_name,
             'box': self.config.box,
@@ -125,14 +146,18 @@ class CalvadosWrapper:
             'verbose': sim_params.verbose,
         }
         
-        # SLAB 拓扑需要指定 slab_width
+        # SLAB topology needs to specify slab_width
         if slab_width is not None:
             params['slab_width'] = slab_width
+        
+        if self._is_droplet_topology():
+            params['ext_force'] = True
+            params['ext_force_expr'] = self._get_droplet_force_expr()
         
         return Config(**params)
     
     def create_components(self) -> 'ms2_config.Components':
-        """创建 ms2_calvados Components 对象"""
+        """Create ms2_calvados Components object"""
         from CondenSimAdapter.extern.ms2_calvados.calvados.cfg import Components
         
         first_comp = self.config.components[0] if self.config.components else None
@@ -180,14 +205,14 @@ class CalvadosWrapper:
     
     def write(self, output_dir: str, overwrite: bool = False) -> Dict[str, str]:
         """
-        写入配置文件
+        Write configuration files
         
         Args:
-            output_dir: 输出目录
-            overwrite: 是否覆盖
+            output_dir: Output directory
+            overwrite: Whether to overwrite
             
         Returns:
-            生成的文件路径字典
+            Dictionary of generated file paths
         """
         output_dir = os.path.abspath(output_dir)
         
@@ -197,11 +222,11 @@ class CalvadosWrapper:
         os.makedirs(output_dir, exist_ok=True)
         self.output_dir = output_dir
         
-        # 创建并写入 config
+        # Create and write config
         ms2_config = self.create_config()
         ms2_config.write(output_dir, name='config.yaml')
         
-        # 创建并写入 components
+        # Create and write components
         ms2_components = self.create_components()
         ms2_components.write(output_dir, name='components.yaml')
         
@@ -212,37 +237,37 @@ class CalvadosWrapper:
         }
     
     def _generate_config_yaml(self, gpu_id: int = 0, verbose: bool = False, continue_from: str = None) -> str:
-        """生成 CALVADOS config.yaml 内容
+        """Generate CALVADOS config.yaml content
 
-        策略：
-        1. 加载 CALVADOS 的 default_config.yaml 作为基础配置
-        2. 只覆盖用户实际配置的参数
-        3. 这样避免了硬编码所有物理常量（eps_lj, cutoff_lj 等）
+        Strategy:
+        1. Load CALVADOS default_config.yaml as base configuration
+        2. Only override parameters that users actually configured
+        3. This avoids hardcoding all physical constants (eps_lj, cutoff_lj, etc.)
 
-        这种方式与原始 CALVADOS 的 Config 类保持一致的设计理念。
+        This approach maintains consistent design philosophy with the original CALVADOS Config class.
 
         Args:
-            gpu_id: GPU 设备 ID（用户指定的 GPU）
-            verbose: 是否输出详细日志
-            continue_from: 继续模拟的坐标文件路径（PDB格式）
+            gpu_id: GPU device ID (user specified GPU)
+            verbose: Whether to output detailed logs
+            continue_from: PDB file path for continuing simulation (PDB format)
         """
         import yaml
         from CondenSimAdapter.extern.ms2_calvados.calvados.cfg import Config
         
         sim_params = self.config.simulation
         
-        # SLAB 拓扑：自动计算 slab_width = box_z / 2
-        # 其他拓扑：使用 CALVADOS 默认值
+        # SLAB topology: auto calculate slab_width = box_z / 2
+        # Other topologies: use CALVADOS default
         if self.config.topol == TopologyType.SLAB:
             slab_width = self.config.box[2] / 2
         else:
             slab_width = None
         
-        # 使用 Config 类加载默认配置
+        # Use Config class to load default configuration
         config_obj = self.create_config()
         config_dict = config_obj.config.copy()
         
-        # 覆盖用户配置的参数（包括 gpu_id 和 verbose）
+        # Override user configured parameters (including gpu_id and verbose)
         config_dict.update({
             'sysname': self.config.system_name,
             'box': self.config.box,
@@ -253,32 +278,37 @@ class CalvadosWrapper:
             'wfreq': sim_params.wfreq,
             'steps': sim_params.steps,
             'platform': self._platform_to_string(),
-            'verbose': verbose,  # 控制 CALVADOS 详细输出
-            'gpu_id': gpu_id,  # 用户指定的 GPU ID
+            'verbose': verbose,  # Control CALVADOS detailed output
+            'gpu_id': gpu_id,  # User specified GPU ID
         })
         
-        # 如果提供了 continue_from，设置 restart='pdb' 和 frestart
+        # If continue_from is provided, set restart='pdb' and frestart
         if continue_from:
             config_dict.update({
                 'restart': 'pdb',
                 'frestart': continue_from,
             })
         
-        # SLAB 拓扑需要指定 slab_width
+        # SLAB topology needs to specify slab_width
         if slab_width is not None:
             config_dict['slab_width'] = slab_width
+        
+        if self._is_droplet_topology():
+            config_dict['topol'] = 'grid'
+            config_dict['ext_force'] = True
+            config_dict['ext_force_expr'] = self._get_droplet_force_expr()
         
         return yaml.dump(config_dict, default_flow_style=False, sort_keys=False)
     
     def _generate_components_yaml(self) -> str:
-        """生成 CALVADOS components.yaml 内容
+        """Generate CALVADOS components.yaml content
         
-        处理 fpdb 和 pdb_folder:
-        - CALVADOS 期望 pdb_folder（目录）和 name（不含扩展名的文件名）
-        - 我们的 config 使用 fpdb（完整文件路径）
+        Handle fpdb and pdb_folder:
+        - CALVADOS expects pdb_folder (directory) and name (filename without extension)
+        - Our config uses fpdb (full file path)
         
         Notes:
-            添加了原版 CALVADOS default_component.yaml 中的所有默认参数：
+            Added all default parameters from original CALVADOS default_component.yaml:
             - periodic: false
             - cutoff_restr: 0.9
             - k_go: 15.
@@ -289,7 +319,7 @@ class CalvadosWrapper:
         
         first_comp = self.config.components[0] if self.config.components else None
         
-        # 计算 pdb_folder（从第一个 MDP 组件的 fpdb 提取）
+        # Calculate pdb_folder (extracted from first MDP component's fpdb)
         pdb_folder = None
         for comp in self.config.components:
             if comp.type.value == 'mdp' and comp.fpdb:
@@ -306,7 +336,7 @@ class CalvadosWrapper:
                 'alpha': 0,
                 'kb': 8033.0,
                 'pdb_folder': pdb_folder,
-                # 原版 CALVADOS default_component.yaml 中的参数
+                # Parameters from original CALVADOS default_component.yaml
                 'periodic': False,
                 'cutoff_restr': 0.9,
                 'k_go': 15.0,
@@ -317,31 +347,31 @@ class CalvadosWrapper:
         }
         
         for comp in self.config.components:
-            # 对于 MDP，验证 fpdb 文件是否存在
-            # CALVADOS 期望文件路径为 {pdb_folder}/{name}.pdb
+            # For MDP, verify fpdb file exists
+            # CALVADOS expects file path as {pdb_folder}/{name}.pdb
             if comp.type == ComponentType.MDP and comp.fpdb:
                 pdb_folder = os.path.dirname(os.path.abspath(comp.fpdb))
                 expected_pdb = os.path.join(pdb_folder, f"{comp.name}.pdb")
                 actual_pdb = os.path.abspath(comp.fpdb)
                 
-                # 验证文件存在
+                # Verify file exists
                 if not os.path.exists(actual_pdb):
                     raise FileNotFoundError(
                         f"PDB file not found: {actual_pdb}\n"
                         f"  Component: {comp.name}\n"
                         f"  Expected by CALVADOS: {expected_pdb}\n"
                         f"\n"
-                        f"解决方案（二选一）：\n"
-                        f"  1. 重命名 PDB 文件: mv h1.pdb H1.pdb\n"
-                        f"  2. 修改 component name: name: h1  (小写)"
+                        f"Choose one of the following solutions:\n"
+                        f"  1. Rename PDB file: mv h1.pdb H1.pdb\n"
+                        f"  2. Modify component name: name: h1  (lowercase)"
                     )
                 
-                # 如果实际文件路径与 CALVADOS 期望的不匹配，给出警告
+                # Warn if actual file path doesn't match CALVADOS expectation
                 if actual_pdb != expected_pdb:
-                    print(f"\n  ⚠️  Warning: Component '{comp.name}' has fpdb='{comp.fpdb}'")
+                    print(f"\n  Warning: Component '{comp.name}' has fpdb='{comp.fpdb}'")
                     print(f"      CALVADOS expects file named: {comp.name}.pdb")
                     print(f"      This mismatch WILL cause errors!")
-                    print(f"\n  解决方案：")
+                    print(f"\n  Solution:")
                     print(f"    mv {comp.fpdb} {os.path.join(pdb_folder, comp.name)}.pdb")
                     print(f"")
             
@@ -359,24 +389,24 @@ class CalvadosWrapper:
                 'colabfold': comp.colabfold,
                 'charge_termini': comp.charge_termini,
             }
-            # 移除 None 值
+            # Remove None values
             comp_dict = {k: v for k, v in comp_dict.items() if v is not None}
             components['system'][comp.name] = comp_dict
         
         return yaml.dump(components, default_flow_style=False, sort_keys=False)
     
     def _write_to_dir(self, output_dir: str, gpu_id: int = 0, verbose: bool = False, continue_from: str = None) -> Dict[str, str]:
-        """写入配置文件到指定目录（返回文件路径字典）
+        """Write configuration files to specified directory (return file path dictionary)
 
-        支持两种 fdomains 格式：
-        1. 文件路径：'TDP43_domains.yaml' - 直接复制到输出目录
-        2. 内联 YAML：'TDP43:\n  - [3, 76]\n...' - 写入临时文件
+        Support two fdomains formats:
+        1. File path: 'TDP43_domains.yaml' - directly copy to output directory
+        2. Inline YAML: 'TDP43:\n  - [3, 76]\n...' - write to temp file
 
         Args:
-            output_dir: 输出目录
-            gpu_id: GPU 设备 ID（用于写入 config.yaml）
-            verbose: 是否输出详细日志
-            continue_from: 继续模拟的坐标文件路径（PDB格式，会被复制到输出目录）
+            output_dir: Output directory
+            gpu_id: GPU device ID (for writing config.yaml)
+            verbose: Whether to output detailed logs
+            continue_from: PDB file path for continuing simulation (will be copied to output directory)
         """
         import tempfile
         import shutil
@@ -384,18 +414,18 @@ class CalvadosWrapper:
         os.makedirs(output_dir, exist_ok=True)
         self.output_dir = output_dir
 
-        # 写入 config.yaml（传入 gpu_id、verbose 和 continue_from）
+        # Write config.yaml (pass gpu_id, verbose, and continue_from)
         config_file = os.path.join(output_dir, 'config.yaml')
         with open(config_file, 'w') as f:
             f.write(self._generate_config_yaml(gpu_id=gpu_id, verbose=verbose, continue_from=continue_from))
         
-        # 处理 components.yaml，支持内联 fdomains
+        # Handle components.yaml, support inline fdomains
         components_yaml = self._generate_components_yaml()
         
-        # 检查是否有内联 fdomains 需要处理
+        # Check if there are inline fdomains to process
         components_yaml = self._process_inline_fdomains(components_yaml, output_dir)
         
-        # 写入 components.yaml
+        # Write components.yaml
         components_file = os.path.join(output_dir, 'components.yaml')
         with open(components_file, 'w') as f:
             f.write(components_yaml)
@@ -406,79 +436,79 @@ class CalvadosWrapper:
         }
     
     def _process_inline_fdomains(self, components_yaml: str, output_dir: str) -> str:
-        """处理内联的 fdomains，如果是 YAML 内容则写入临时文件"""
+        """Process inline fdomains, write to temp file if YAML content"""
         import yaml
 
-        # 解析 YAML
+        # Parse YAML
         components = yaml.safe_load(components_yaml)
 
         for name, props in components.get('system', {}).items():
             fdomains = props.get('fdomains')
             if fdomains and isinstance(fdomains, str):
-                # 移除 YAML 引号（单引号或双引号）
+                # Remove YAML quotes (single or double quotes)
                 stripped = fdomains.strip()
                 if stripped.startswith('"') and stripped.endswith('"'):
                     stripped = stripped[1:-1]
                 elif stripped.startswith("'") and stripped.endswith("'"):
                     stripped = stripped[1:-1]
 
-                # 检查是否是内联 YAML（不是文件路径）
+                # Check if it's inline YAML (not a file path)
                 is_inline = False
                 if stripped.startswith('{') or stripped.startswith('['):
                     is_inline = True
                 elif '\n' in stripped and (':' in stripped or stripped.startswith('-')):
-                    # 多行内容且包含 YAML 特征
+                    # Multi-line content with YAML features
                     is_inline = True
                 elif ':' in stripped and not stripped.endswith('.yaml') and not stripped.endswith('.yml'):
-                    # 包含冒号但不像是文件路径
+                    # Contains colon but doesn't look like file path
                     is_inline = True
 
                 if is_inline:
                     try:
-                        # 尝试解析为 YAML
+                        # Try to parse as YAML
                         domains_data = yaml.safe_load(stripped)
 
-                        # 确保解析结果是字典
+                        # Ensure parse result is a dictionary
                         if isinstance(domains_data, dict):
-                            # 只写入当前蛋白的域数据，使用蛋白名称作为 key
+                            # Only write current protein's domain data, use protein name as key
                             protein_domains = {name: domains_data.get(name, [])}
                         elif isinstance(domains_data, list):
-                            # 直接是域列表 [[3, 76], ...]
+                            # Direct domain list [[3, 76], ...]
                             protein_domains = {name: domains_data}
                         else:
                             continue
 
-                        # 写入临时文件
+                        # Write to temp file
                         domains_file = os.path.join(output_dir, f'{name}_domains.yaml')
                         with open(domains_file, 'w') as f:
                             yaml.dump(protein_domains, f, default_flow_style=False)
 
-                        # 替换为文件路径
+                        # Replace with file path
                         props['fdomains'] = domains_file
 
                     except yaml.YAMLError:
-                        # 不是有效的 YAML，保持原样（可能是文件路径）
+                        # Not valid YAML, keep as is (might be file path)
                         pass
 
         return yaml.dump(components, default_flow_style=False, sort_keys=False)
     
     def run(self, output_dir: str = None, gpu_id: int = 0, verbose: bool = False) -> SimulationResult:
         """
-        运行 CALVADOS 模拟
+        Run CALVADOS simulation
         
-        统一输出结构：
+        Unified output structure:
         {system_name}_CG/
-        ├── final.pdb                   # 最终结构
-        ├── trajectory.xtc              # 模拟轨迹
-        ├── simulation.log              # 高层级日志
-        └── raw/                        # 原生输出
+        ├── final.pdb                   # Final structure
+        ├── trajectory.xtc              # Simulation trajectory
+        ├── simulation.log              # High-level log
+        └── raw/                        # Native output
             ├── config.yaml
             ├── components.yaml
             ├── *.xtc, *.xml, *.pdb, *.chk, *.txt
         
         Args:
-            output_dir: 输出目录（默认使用 config 中的 output_dir，如果传入则直接使用）
-            gpu_id: GPU 设备 ID
+            output_dir: Output directory (use config's output_dir by default, use directly if provided)
+            gpu_id: GPU device ID
             
         Returns:
             SimulationResult
@@ -491,21 +521,21 @@ class CalvadosWrapper:
         if output_dir is None:
             output_dir = self.config.output_dir
         
-        # 统一添加 _CG 后缀
+        # Unified _CG suffix addition
         task_name = f"{self.config.system_name}_CG"
         output_dir = os.path.join(output_dir, task_name)
         raw_dir = os.path.join(output_dir, 'raw')
         
-        # 如果目录已存在，备份后重建
+        # If directory exists, backup and recreate
         if os.path.exists(output_dir):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_dir = f"{output_dir}_backup_{timestamp}"
             shutil.move(output_dir, backup_dir)
-            print(f"  📁 备份旧结果到: {backup_dir}")
+            print(f"  Backup old results to: {backup_dir}")
         
         os.makedirs(raw_dir, exist_ok=True)
 
-        # 写入配置文件到 raw 目录（传入 gpu_id 和 verbose）
+        # Write configuration files to raw directory (pass gpu_id and verbose)
         files = self._write_to_dir(raw_dir, gpu_id=gpu_id, verbose=verbose)
         
         result = SimulationResult()
@@ -520,30 +550,30 @@ class CalvadosWrapper:
             print(f"  Raw output: {raw_dir}")
             print(f"  Topology: {self._topol_to_calvados()}")
             
-            # 运行模拟（输出到 raw 目录）
+            # Run simulation (output to raw directory)
             calvados_sim.run(
                 path=raw_dir,
                 fconfig='config.yaml',
                 fcomponents='components.yaml'
             )
             
-            # 组织输出文件
+            # Organize output files
             self._organize_output(raw_dir, output_dir, task_name)
             
             result.success = True
             elapsed = time.time() - start_time
-            print(f"  ✓ CALVADOS simulation completed ({elapsed:.1f}s)")
+            print(f"  CALVADOS simulation completed ({elapsed:.1f}s)")
             
         except Exception as e:
             result.success = False
             result.errors.append(str(e))
-            print(f"  ✗ CALVADOS simulation failed: {e}")
+            print(f"  CALVADOS simulation failed: {e}")
             elapsed = time.time() - start_time
         
-        # 写入高层级日志
+        # Write high-level simulation log
         self._write_simulation_log(output_dir, task_name, elapsed, result.success)
         
-        # 设置结果文件路径
+        # Set result file paths
         result.trajectory = os.path.join(output_dir, 'trajectory.xtc')
         result.structure = os.path.join(output_dir, 'final.pdb')
         
@@ -556,27 +586,27 @@ class CalvadosWrapper:
     
     def _organize_output(self, raw_dir: str, output_dir: str, task_name: str):
         """
-        组织输出文件到统一结构
+        Organize output files to unified structure
         
-        统一命名规则：
+        Unified naming rules:
         - trajectory.xtc  <- {task_name}.xtc
-        - final.pdb       <- 带时间戳的 pdb 或 checkpoint.pdb
+        - final.pdb       <- Timestamped pdb or checkpoint.pdb
         """
         import shutil
         
         sysname = self.config.system_name
         
-        # 1. 处理轨迹文件
+        # 1. Process trajectory file
         src_xtc = os.path.join(raw_dir, f'{sysname}.xtc')
         dst_xtc = os.path.join(output_dir, 'trajectory.xtc')
         if os.path.exists(src_xtc):
             shutil.copy2(src_xtc, dst_xtc)
-            print(f"  📦 trajectory.xtc")
+            print(f"  trajectory.xtc")
         
-        # 2. 查找并复制最终结构（优先使用 checkpoint.pdb，否则找时间戳 PDB）
+        # 2. Find and copy final structure (prefer checkpoint.pdb, otherwise look for timestamped PDB)
         src_pdb = os.path.join(raw_dir, 'checkpoint.pdb')
         if not os.path.exists(src_pdb):
-            # 找带时间戳的 PDB
+            # Look for timestamped PDB
             for f in os.listdir(raw_dir):
                 if f.endswith('.pdb') and f != 'top.pdb':
                     src_pdb = os.path.join(raw_dir, f)
@@ -585,9 +615,9 @@ class CalvadosWrapper:
         dst_pdb = os.path.join(output_dir, 'final.pdb')
         if os.path.exists(src_pdb):
             shutil.copy2(src_pdb, dst_pdb)
-            print(f"  📦 final.pdb")
+            print(f"  final.pdb")
         
-        # 3. 复制重要文件到 raw 目录（如果不在那里）
+        # 3. Copy important files to raw directory (if not already there)
         important_files = [
             (f'{sysname}.xml', 'system.xml'),
             ('top.pdb', 'top.pdb'),
@@ -602,15 +632,15 @@ class CalvadosWrapper:
                 if src != dst:
                     shutil.copy2(src, dst)
         
-        # 4. 重命名 log 文件
+        # 4. Rename log files
         for f in os.listdir(raw_dir):
             if f.endswith('.log') or f.endswith('.txt'):
-                pass  # 保留原样
+                pass  # Keep original
         
-        print(f"  📁 原始输出已整理到: {raw_dir}")
+        print(f"  Raw output organized to: {raw_dir}")
     
     def _write_simulation_log(self, output_dir: str, task_name: str, elapsed: float, success: bool):
-        """写入高层级模拟日志"""
+        """Write high-level simulation log"""
         from datetime import datetime
         
         log_file = os.path.join(output_dir, 'simulation.log')
@@ -652,17 +682,17 @@ Output Files:
         with open(log_file, 'w') as f:
             f.write(log_content)
         
-        print(f"  📝 simulation.log")
+        print(f"  simulation.log")
 
 
 def run_calvados(config: CGSimulationConfig, output_dir: str = None, gpu_id: int = 0) -> SimulationResult:
     """
-    运行 CALVADOS 模拟的便捷函数
+    Convenient function to run CALVADOS simulation
     
     Args:
-        config: CGSimulationConfig 实例
-        output_dir: 输出目录
-        gpu_id: GPU 设备 ID
+        config: CGSimulationConfig instance
+        output_dir: Output directory
+        gpu_id: GPU device ID
         
     Returns:
         SimulationResult

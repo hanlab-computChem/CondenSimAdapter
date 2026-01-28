@@ -803,7 +803,7 @@ class PaceOptSimulator:
         1. #include "pace-new.ff/forcefield.itp"
         2. [ moleculetype ] section (molecule definition)
         3. ... (bonds, angles, dihedrals, etc.)
-        4. ; Include water topology  ← 遇到这行停止，上一行是结尾
+        4. ; Include water topology  ← Stop when encountering this line, previous line is the end
         5. [ molecules ] section
 
         Args:

@@ -161,7 +161,8 @@ def parse_box(box_tuple: Optional[tuple], topol: str, default_box: List[float]) 
 
 def generate_yaml_with_comments(config: 'CGSimulationConfig', topol: str, 
                                   geom_description: str, time_ns: float, 
-                                  component_list: List[dict], force_field: str = 'calvados') -> str:
+                                  component_list: List[dict], force_field: str = 'calvados',
+                                  radius: Optional[float] = None) -> str:
     """Generate YAML with detailed comments"""
     import yaml
     
@@ -188,25 +189,30 @@ def generate_yaml_with_comments(config: 'CGSimulationConfig', topol: str,
         f"force_field: {force_field}   # calvados | hps_urry | cocomo | mpipi_recharged",
         "",
         "# Environment parameters",
-        f"box: [{', '.join(f'{v:.1f}' for v in config.box)}]   # nm (x, y, z)",
-        f"temperature: {config.temperature}         # Kelvin",
-        f"ionic: {config.ionic}                # Molar (ionic strength)",
-        "",
-        "# Topology type:",
-        "#   - grid: Continuous dense phase with periodic boundaries in x, y, z.",
-        "#   - droplet: Spherical droplet confined within radius r, surrounded by dilute phase",
-        "#   - slab: Geometry with periodic boundaries in x, y and interfaces with dilute phase along z.",
-        f"topol: {topol}",
-        "",
-        "# CG simulation parameters",
-        "simulation:",
-        f"  steps: {config.simulation.steps}   # {time_ns} ns (1 step = 10 fs)",
-        f"  wfreq: {config.simulation.wfreq}        # write frequency - save per 50 ps",
-        f"  verbose: {str(config.simulation.verbose).lower()}",
-        "",
-        "# Component definitions",
-        "components:",
     ]
+    
+    # Add radius for droplet geometry
+    if topol == 'droplet' and radius is not None:
+        lines.append(f"radius: {radius:.1f}   # nm (droplet radius, box = [2*r, 2*r, 2*r])")
+    
+    lines.append(f"box: [{', '.join(f'{v:.1f}' for v in config.box)}]   # nm (x, y, z)")
+    lines.append(f"temperature: {config.temperature}         # Kelvin")
+    lines.append(f"ionic: {config.ionic}                # Molar (ionic strength)")
+    lines.append("")
+    lines.append("# Topology type:")
+    lines.append("#   - grid: Continuous dense phase with periodic boundaries in x, y, z.")
+    lines.append("#   - droplet: Spherical droplet confined within radius r, surrounded by dilute phase")
+    lines.append("#   - slab: Geometry with periodic boundaries in x, y and interfaces with dilute phase along z.")
+    lines.append(f"topol: {topol}")
+    lines.append("")
+    lines.append("# CG simulation parameters")
+    lines.append("simulation:")
+    lines.append(f"  steps: {config.simulation.steps}   # {time_ns} ns (1 step = 10 fs)")
+    lines.append(f"  wfreq: {config.simulation.wfreq}        # write frequency - save per 50 ps")
+    lines.append(f"  verbose: {str(config.simulation.verbose).lower()}")
+    lines.append("")
+    lines.append("# Component definitions")
+    lines.append("components:")
     
     # Add components with comments
     for i, comp in enumerate(component_list):
@@ -227,14 +233,5 @@ def generate_yaml_with_comments(config: 'CGSimulationConfig', topol: str,
             lines.append(f"      {comp['name']}:")
             lines.append("        - [1, 50]    # Domain 1: residues 1-50")
             lines.append("        - [51, 100]  # Domain 2: residues 51-100")
-            lines.append("    # Alternative options:")
-            lines.append("    # Option 1 - Inline YAML (as above, recommended)")
-            lines.append("    # Option 2 - File path:")
-            lines.append(f"    #   fdomains: {comp['name']}_domains.yaml")
-            if comp.get('restraint'):
-                lines.append(f"    restraint: {str(comp['restraint']).lower()}")
-                lines.append(f"    restraint_type: {comp.get('restraint_type', 'harmonic')}  # harmonic | go")
-            if comp.get('charge_termini'):
-                lines.append(f"    charge_termini: {comp['charge_termini']}  # both | n | c | none")
     
     return '\n'.join(lines) + '\n'

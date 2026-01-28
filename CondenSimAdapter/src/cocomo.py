@@ -575,60 +575,60 @@ def main():
     sim.setup(config.output_dir)
     
     # ============================================================
-    # 获取体系拓扑信息 (使用新增的接口方法)
+    # Get system topology information (using the new interface methods)
     # ============================================================
     print("\n" + "=" * 60)
-    print("体系拓扑信息")
+    print("System Topology Information")
     print("=" * 60)
     
-    # 1. 获取体系构成
-    print("\n1. 体系构成 (get_composition):")
+    # 1. Get system composition
+    print("\n1. System Composition (get_composition):")
     composition = sim.get_composition()
     for comp in composition:
         print(f"   - {comp['name']}: nmol={comp['nmol']}, nres={comp['nres']}, type={comp['type']}")
     
-    # 2. 获取全局序列
-    print("\n2. 全局序列 (get_global_sequence):")
+    # 2. Get global sequence
+    print("\n2. Global Sequence (get_global_sequence):")
     global_seq = sim.get_global_sequence()
-    print(f"   - 长度: {len(global_seq)}")
-    print(f"   - 前50字符: {global_seq[:50]}...")
-    print(f"   - 后50字符: ...{global_seq[-50:]}")
+    print(f"   - Length: {len(global_seq)}")
+    print(f"   - First 50 characters: {global_seq[:50]}...")
+    print(f"   - Last 50 characters: ...{global_seq[-50:]}")
     
-    # 3. 获取链ID
-    print("\n3. 链ID (get_chain_ids):")
+    # 3. Get chain IDs
+    print("\n3. Chain IDs (get_chain_ids):")
     chain_ids = sim.get_chain_ids()
-    print(f"   - 长度: {len(chain_ids)}")
-    print(f"   - 链ID范围: 1-{max(chain_ids)} (共 {max(chain_ids)} 条链)")
+    print(f"   - Length: {len(chain_ids)}")
+    print(f"   - Chain ID range: 1-{max(chain_ids)} (total {max(chain_ids)} chains)")
     
-    # 4. 获取fold domain信息
+    # 4. Get fold domain information
     print("\n4. Folded Domain (get_folded_domains):")
     folded = sim.get_folded_domains()
     n_folded = sum(folded)
     n_unfolded = len(folded) - n_folded
-    print(f"   - 长度: {len(folded)}")
-    print(f"   - Folded区域: {n_folded} ({n_folded/len(folded)*100:.1f}%)")
-    print(f"   - Unfolded区域: {n_unfolded} ({n_unfolded/len(folded)*100:.1f}%)")
+    print(f"   - Length: {len(folded)}")
+    print(f"   - Folded regions: {n_folded} ({n_folded/len(folded)*100:.1f}%)")
+    print(f"   - Unfolded regions: {n_unfolded} ({n_unfolded/len(folded)*100:.1f}%)")
     
-    # 5. 构建 topology_info 字典
-    print("\n5. 构建 COCOMO 系统:")
+    # 5. Build topology_info dictionary
+    print("\n5. Building COCOMO system:")
     topology_info = {
         'global_sequence': sim.get_global_sequence(),
         'chain_ids': sim.get_chain_ids(),
         'folded_domains': sim.get_folded_domains(),
-        'component_names': [],  # 可以从 get_composition 构建
+        'component_names': [],  # Can be built from get_composition
         'local_residue_indices': list(range(1, len(sim.get_global_sequence()) + 1))
     }
     
-    # 从 composition 构建 component_names
+    # Build component_names from composition
     comp_names = []
     for comp in sim.get_composition():
         for _ in range(comp['nmol']):
             comp_names.extend([comp['name']] * comp['nres'])
     topology_info['component_names'] = comp_names
     
-    print(f"   - topology_info 构建完成")
-    print(f"   - global_sequence 长度: {len(topology_info['global_sequence'])}")
-    print(f"   - chain_ids 长度: {len(topology_info['chain_ids'])}")
+    print(f"   - topology_info built successfully")
+    print(f"   - global_sequence length: {len(topology_info['global_sequence'])}")
+    print(f"   - chain_ids length: {len(topology_info['chain_ids'])}")
     
     print("=" * 60 + "\n")
 

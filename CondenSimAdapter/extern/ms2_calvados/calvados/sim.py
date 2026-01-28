@@ -208,7 +208,7 @@ class Sim:
                 self.add_interactions(comp)
 
                 # add restraints towards box center
-                if (self.slab_eq or self.ext_force) and comp.ext_restraint:
+                if (self.slab_eq or self.ext_force) and getattr(comp, 'ext_restraint', False):
                     self.add_ext_restraints(comp)
 
         if self.custom_restraints:
@@ -426,7 +426,7 @@ class Sim:
         """ Add external-potential restraints. """
 
         offset = self.nparticles - comp.nbeads # to get indices of current comp in context of system
-        for i in range(0,comp.nbeads):
+        for i in range(0, comp.nbeads, 10):
             self.rcent.addParticle(i+offset)
 
     def add_mdtraj_topol(self, comp):
@@ -525,9 +525,9 @@ class Sim:
         if self.platform == 'CPU':
             simulation = app.simulation.Simulation(pdb.topology, self.system, integrator, platform, dict(Threads=str(self.threads)))
         else:
-            # 修复 GPU 设备选择问题
-            # 直接使用 gpu_id 作为 DeviceIndex，忽略 CUDA_VISIBLE_DEVICES
-            # 这样 gpu_id=0 使用 GPU 0，gpu_id=1 使用 GPU 1，以此类推
+            # Fix GPU device selection issue
+            # Directly use gpu_id as DeviceIndex, ignore CUDA_VISIBLE_DEVICES
+            # This way gpu_id=0 uses GPU 0, gpu_id=1 uses GPU 1, and so on
             platform.setPropertyDefaultValue('DeviceIndex', str(self.gpu_id))
             
             simulation = app.simulation.Simulation(pdb.topology, self.system, integrator, platform)

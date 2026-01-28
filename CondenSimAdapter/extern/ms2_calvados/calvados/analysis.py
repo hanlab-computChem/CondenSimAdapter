@@ -1,6 +1,6 @@
 """
 Minimal analysis module for ms2_calvados
-只保留 self_distances 函数（被 components.py 使用）
+Only keep self_distances function (used by components.py)
 """
 
 import numpy as np

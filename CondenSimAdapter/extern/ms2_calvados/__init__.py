@@ -1,9 +1,9 @@
 """
 ms2_calvados - Internalized CALVADOS coarse-grained simulation package
-保留核心功能：体系构建 + OpenMM 模拟
+Retain core functions: system construction + OpenMM simulation
 """
 
-# 核心模块
+# Core modules
 from .calvados import cfg
 from .calvados import components
 from .calvados import build
@@ -11,7 +11,7 @@ from .calvados import sim
 from .calvados import sequence
 from .calvados import interactions
 
-# 暴露关键类
+# Expose key classes
 from .calvados.cfg import Config, Job, Components
 from .calvados.components import Component, Protein, RNA, Lipid, Crowder
 

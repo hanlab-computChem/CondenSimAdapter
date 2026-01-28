@@ -219,7 +219,7 @@ class BackmapSimulator:
             protein = u.atoms
         
         # COM z coordinate
-        com = protein.center_of_mass()  # 返回 [x, y, z]
+        com = protein.center_of_mass()  # Returns [x, y, z]
         z_com = com[2]  # Angstrom
         
         # Box size (MDAnalysis uses Angstrom)
@@ -314,7 +314,7 @@ class BackmapSimulator:
 
     def _format_ter_from_atom_line(self, atom_line: str) -> str:
         """
-        基于 ATOM 行生成 TER 行，保持链/残基信息。
+        Generate TER line from ATOM line, preserving chain/residue information.
         """
         try:
             serial = int(atom_line[6:11]) + 1
@@ -330,26 +330,26 @@ class BackmapSimulator:
     
     def detect_source_type(self, input_path: str) -> SourceType:
         """
-        检测输入是 ms2 cg 输出还是 user provided
+        Detect if input is ms2 cg output or user provided
         
         Args:
-            input_path: 输入路径（目录或文件）
+            input_path: Input path (directory or file)
             
         Returns:
-            SourceType.MS2_CG 或 SourceType.USER_PROVIDED
+            SourceType.MS2_CG or SourceType.USER_PROVIDED
         """
         path = Path(input_path)
         
-        # 检查是否是目录（ms2 cg 输出）
+        # Check if it's a directory (ms2 cg output)
         if path.is_dir():
-            # 检查目录结构特征
+            # Check directory structure features
             has_final_pdb = (path / "final.pdb").exists()
             has_simulation_log = (path / "simulation.log").exists()
             
             if has_final_pdb or has_simulation_log:
                 return SourceType.MS2_CG
         
-        # 检查是否是 PDB 文件（user provided）
+        # Check if it's a PDB file (user provided)
         if path.is_file() and path.suffix.lower() == '.pdb':
             return SourceType.USER_PROVIDED
         
@@ -357,17 +357,17 @@ class BackmapSimulator:
     
     def find_config_yaml(self, cg_output_dir: str, system_name: str, explicit_config: Optional[str] = None) -> Optional[str]:
         """
-        查找 config.yaml 文件
+        Find config.yaml file
         
         Args:
-            cg_output_dir: CG 输出目录
-            system_name: 系统名称
-            explicit_config: 用户显式提供的 config 路径
+            cg_output_dir: CG output directory
+            system_name: System name
+            explicit_config: Explicitly provided config path by user
             
         Returns:
-            config.yaml 路径，如果找不到返回 None
+            config.yaml path, or None if not found
         """
-        # 优先使用用户显式提供的
+        # Prioritize user explicitly provided config
         if explicit_config:
             config_path = Path(explicit_config)
             if config_path.exists():
@@ -375,12 +375,12 @@ class BackmapSimulator:
             else:
                 raise FileNotFoundError(f"Config file not found: {explicit_config}")
         
-        # 备选：查找当前工作目录
+        # Fallback: search current working directory
         pwd_config = Path.cwd() / f"{system_name}.yaml"
         if pwd_config.exists():
             return str(pwd_config)
         
-        # 备选：查找父目录
+        # Fallback: search parent directory
         parent_config = Path(cg_output_dir).parent / f"{system_name}.yaml"
         if parent_config.exists():
             return str(parent_config)
@@ -389,27 +389,27 @@ class BackmapSimulator:
     
     def select_model_type(self, config: CGSimulationConfig, force_field: Optional[str] = None) -> str:
         """
-        选择 CG model 类型
+        Select CG model type
         
-        规则：
-        - 如果用户指定了 model_type，使用用户指定的
-        - 否则：Calvados + MDP → ResidueBasedModel，其他 → CalalphaBasedModel
+        Rules:
+        - If user specified model_type, use user's specification
+        - Otherwise: Calvados + MDP → ResidueBasedModel, others → CalalphaBasedModel
         
         Args:
             config: CGSimulationConfig
-            force_field: 力场名称（可选，用于检测）
+            force_field: Force field name (optional, used for detection)
             
         Returns:
-            "ResidueBasedModel" 或 "CalphaBasedModel"
+            "ResidueBasedModel" or "CalphaBasedModel"
         """
-        # 如果用户指定了 model_type，使用用户指定的
+        # If user specified model_type, use user's specification
         if self.backmap_config.model_type and self.backmap_config.model_type != 'auto':
             return self.backmap_config.model_type
         
-        # 自动选择逻辑
+        # Auto selection logic
         has_mdp = any(c.type == ComponentType.MDP for c in config.components)
         
-        # 检测力场（如果未提供）
+        # Detect force field (if not provided)
         if force_field is None:
             force_field = self._detect_force_field_from_dir(config)
         
@@ -422,43 +422,43 @@ class BackmapSimulator:
     
     def _detect_force_field_from_dir(self, config: CGSimulationConfig) -> Optional[str]:
         """
-        从配置或目录结构检测力场
+        Detect force field from config or directory structure
         
-        这是一个简单的启发式方法，可以通过检查输出目录结构来推断力场
+        This is a simple heuristic method that can infer force field by checking output directory structure
         """
-        # 如果 config 有相关信息，可以在这里添加检测逻辑
-        # 目前返回 None，让调用者提供
+        # If config has relevant information, detection logic can be added here
+        # Currently returns None, letting caller provide it
         return None
     
     def prepare_ms2_cg_input(self, cg_output_dir: str, config_path: Optional[str] = None) -> PreparedInput:
         """
-        准备 ms2 cg 输出用于 backmap
+        Prepare ms2 cg output for backmap
         
         Args:
-            cg_output_dir: CG 输出目录路径
-            config_path: 显式提供的 config.yaml 路径（可选）
+            cg_output_dir: CG output directory path
+            config_path: Explicitly provided config.yaml path (optional)
             
         Returns:
-            PreparedInput 对象
+            PreparedInput object
         """
         cg_output_path = Path(cg_output_dir)
         
-        # 1. 读取 final.pdb
+        # 1. Read final.pdb
         final_pdb = cg_output_path / "final.pdb"
         if not final_pdb.exists():
             raise FileNotFoundError(f"final.pdb not found in {cg_output_dir}")
         
-        # 2. 查找并加载 config.yaml
-        # 从目录名推断 system_name（假设格式为 {system_name}_CG）
+        # 2. Find and load config.yaml
+        # Infer system_name from directory name (assuming format is {system_name}_CG)
         system_name = cg_output_path.name.replace('_CG', '')
         
         config_yaml_path = self.find_config_yaml(str(cg_output_dir), system_name, config_path)
         
         if config_yaml_path:
             config = CGSimulationConfig.from_yaml(config_yaml_path)
-            # 更新 simulator 的 config（用于后续使用）
+            # Update simulator's config (for subsequent use)
             self.config = config
-            # 合并 backmap 配置（CLI 参数优先）
+            # Merge backmap config (CLI parameters take priority)
             if config.backmap:
                 if not self.backmap_config.model_type and config.backmap.model_type:
                     self.backmap_config.model_type = config.backmap.model_type
@@ -467,18 +467,18 @@ class BackmapSimulator:
                 if not self.backmap_config.output_dir and config.backmap.output_dir:
                     self.backmap_config.output_dir = config.backmap.output_dir
         else:
-            # 如果没有找到 config，创建一个最小配置（仅用于 model type 选择）
-            # 这种情况下，我们无法准确判断是否有 MDP，默认使用 CalalphaBasedModel
+            # If no config found, create a minimal config (only for model type selection)
+            # In this case, we cannot accurately determine if there's MDP, default to CalalphaBasedModel
             config = None
         
-        # 3. 检测力场（通过目录结构）
+        # 3. Detect force field (via directory structure)
         force_field = self._detect_force_field_from_directory(cg_output_path)
         
-        # 4. 选择 CG model
+        # 4. Select CG model
         if config:
             model_type = self.select_model_type(config, force_field)
         else:
-            # 如果没有 config，默认使用 CalalphaBasedModel
+            # If no config, default to CalalphaBasedModel
             model_type = "CalphaBasedModel"
         
         return PreparedInput(
@@ -488,8 +488,8 @@ class BackmapSimulator:
         )
     
     def _detect_force_field_from_directory(self, cg_output_path: Path) -> Optional[str]:
-        """从目录结构检测力场类型"""
-        # 检查子目录名称
+        """Detect force field type from directory structure"""
+        # Check subdirectory names
         subdirs = [d.name for d in cg_output_path.iterdir() if d.is_dir()]
         
         if 'Mpipi-Recharged' in subdirs or 'mpipi_recharged' in subdirs:
@@ -499,30 +499,30 @@ class BackmapSimulator:
         elif 'COCOMO' in subdirs or 'cocomo' in subdirs:
             return 'cocomo'
         elif 'raw' in subdirs:
-            # raw 目录通常表示 calvados
+            # raw directory usually indicates calvados
             return 'calvados'
         
         return None
     
     def prepare_user_provided_input(self, pdb_path: str, config: CGSimulationConfig) -> PreparedInput:
         """
-        准备 user provided PDB 用于 backmap
+        Prepare user provided PDB for backmap
         
         Args:
-            pdb_path: 用户提供的 PDB 文件路径
-            config: CGSimulationConfig（必须包含 components 信息）
+            pdb_path: User provided PDB file path
+            config: CGSimulationConfig (must contain components information)
             
         Returns:
-            PreparedInput 对象
+            PreparedInput object
         """
         if not config or not config.components:
             raise ValueError("User provided mode requires config with components")
         
-        # 1. 使用 calvados 构建标准化 PDB
+        # 1. Use calvados to build standardized PDB
         temp_standardized = tempfile.mktemp(suffix='.pdb', prefix='standardized_')
         standardized_pdb = standardize_pdb_with_calvados(pdb_path, config, temp_standardized)
         
-        # 2. 选择 model type
+        # 2. Select model type
         model_type = self.select_model_type(config, force_field='calvados')
         
         return PreparedInput(
@@ -533,15 +533,15 @@ class BackmapSimulator:
     
     def run(self, input_path: str, config_path: Optional[str] = None, output_dir: Optional[str] = None) -> BackmapResult:
         """
-        执行 backmap
+        Execute backmap
         
         Args:
-            input_path: 输入路径（CG 输出目录或 PDB 文件）
-            config_path: 配置文件路径（可选）
-            output_dir: 输出目录（可选，默认 {system_name}_backmap）
+            input_path: Input path (CG output directory or PDB file)
+            config_path: Config file path (optional)
+            output_dir: Output directory (optional, default {system_name}_backmap)
             
         Returns:
-            BackmapResult 对象
+            BackmapResult object
         """
         result = BackmapResult(
             success=False,
@@ -552,38 +552,38 @@ class BackmapSimulator:
         )
         
         try:
-            # 1. 检测输入类型
+            # 1. Detect input type
             source_type = self.detect_source_type(input_path)
             
-            # 2. 准备输入
+            # 2. Prepare input
             if source_type == SourceType.MS2_CG:
                 prepared = self.prepare_ms2_cg_input(input_path, config_path)
             else:  # USER_PROVIDED
                 if not config_path:
                     raise ValueError("User provided mode requires config.yaml via -f option")
                 config = CGSimulationConfig.from_yaml(config_path)
-                # 更新 simulator 的 config
+                # Update simulator's config
                 self.config = config
-                # 合并 backmap 配置（CLI 参数优先）
+                # Merge backmap config (CLI parameters take priority)
                 if config.backmap:
                     if not self.backmap_config.model_type and config.backmap.model_type:
                         self.backmap_config.model_type = config.backmap.model_type
                     if not self.backmap_config.output_dir and config.backmap.output_dir:
                         self.backmap_config.output_dir = config.backmap.output_dir
-                # Backmap 强制使用 CPU，忽略配置中的 device/gpu 相关设置
+                # Backmap forces CPU, ignores device/gpu related settings from config
                 self.backmap_config.device = "cpu"
                 prepared = self.prepare_user_provided_input(input_path, config)
             
             result.model_type = prepared.model_type
             
-            # 3. 确定输出目录（优先级：CLI 参数 > config.backmap.output_dir > 默认）
+            # 3. Determine output directory (priority: CLI parameter > config.backmap.output_dir > default)
             if output_dir is None:
                 if self.backmap_config.output_dir:
                     output_dir = self.backmap_config.output_dir
                 elif prepared.config:
                     output_dir = f"{prepared.config.system_name}_backmap"
                 else:
-                    # 从输入路径推断
+                    # Infer from input path
                     input_name = Path(input_path).stem
                     if input_name.endswith('_CG'):
                         input_name = input_name[:-3]
@@ -591,10 +591,10 @@ class BackmapSimulator:
             
             os.makedirs(output_dir, exist_ok=True)
             
-            # 4. 确定输出文件名（统一为 final.aa.pdb）
+            # 4. Determine output filename (unified as final.aa.pdb)
             output_pdb = os.path.join(output_dir, "final.aa.pdb")
             
-            # 5. 执行 backmap
+            # 5. Execute backmap
             from CondenSimAdapter.extern.ms2_cg2all import convert_cg2all
             
             device = "cpu"
@@ -604,10 +604,10 @@ class BackmapSimulator:
                 model_type=prepared.model_type,
                 fix_atom=False,
                 device=device,
-                write_ssbond=False  # 默认不写入二硫键记录
+                write_ssbond=False  # Default: do not write disulfide bond records
             )
             
-            # 6. SLAB topology: 在 z 方向居中 condensate
+            # 6. SLAB topology: center condensate in z direction
             if prepared.config and prepared.config.topol.value == 'slab':
                 print(f"  SLAB topology detected: centering condensate in z direction...")
                 self.center_slab_in_z(output_pdb, prepared.config)

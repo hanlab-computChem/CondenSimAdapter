@@ -208,7 +208,11 @@ class MinimizeConfig:
     # pdb2gmx behavior
     disable_disulfide: bool = False
     his_type: Optional[int] = None
-    
+
+    # Droplet box settings (for building box after minimization)
+    droplet_box_type: Optional[str] = None  # dodecahedron, cubic, octahedron
+    droplet_distance: float = 2.0  # Distance between solute and box in nm
+
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Validate force field using registry
@@ -232,6 +236,19 @@ class MinimizeConfig:
 
         if self.his_type is not None and self.his_type not in (0, 1):
             raise ValueError("his_type must be 0 or 1 if provided")
+
+        # Validate droplet box type
+        if self.droplet_box_type is not None:
+            valid_box_types = ["dodecahedron", "cubic", "octahedron"]
+            if self.droplet_box_type not in valid_box_types:
+                raise ValueError(
+                    f"Unknown droplet_box_type: {self.droplet_box_type}. "
+                    f"Valid types: {valid_box_types}"
+                )
+
+        # Validate droplet distance
+        if self.droplet_distance <= 0:
+            raise ValueError("droplet_distance must be positive")
     
     def set_optimization_mode(self, mode: str):
         """Set optimization mode and update lambda values accordingly.
@@ -499,37 +516,62 @@ class MinimizeSimulator:
                 import traceback
                 traceback.print_exc()
                 raise
-            
-            # 5. Solvate if enabled
+
+            # 5. Build droplet box if requested (before solvation for droplet simulations)
+            droplet_box_pdb = None
+            if self.minimize_config.droplet_box_type is not None:
+                step_num += 1
+                click.echo(f"\n[Step {step_num}] Building droplet box...")
+                droplet_dir = output_path / "droplet"
+                droplet_dir.mkdir(exist_ok=True)
+
+                # Build the droplet box from minimized structure
+                droplet_box_pdb = self.build_droplet_box(
+                    str(final_pdb),
+                    droplet_dir,
+                    self.minimize_config.droplet_box_type,
+                    self.minimize_config.droplet_distance
+                )
+
+                click.echo(f"  Droplet box built: {Path(droplet_box_pdb).name}")
+
+            # 6. Solvate if enabled (solvate the droplet box if built, otherwise the original structure)
             if self.minimize_config.solvate_enabled:
                 step_num += 1
                 click.echo(f"\n[Step {step_num}] Explicit solvation...")
                 solvate_dir = output_path / "solvate"
                 solvate_dir.mkdir(exist_ok=True)
-                
-                # Solvate the optimized structure
+
+                # Use droplet box as input if built, otherwise use the minimized structure
+                if droplet_box_pdb is not None:
+                    click.echo(f"  Solvating droplet box...")
+                    solvate_input_pdb = droplet_box_pdb
+                else:
+                    solvate_input_pdb = str(final_pdb)
+
+                # Solvate the structure
                 solvated_gro, solvated_top = self.solvate_system(
-                    str(final_pdb),
+                    solvate_input_pdb,
                     str(final_top),
                     solvate_dir,
                     self.minimize_config.ion_concentration
                 )
-                
+
                 # Update final outputs to solvated version
                 final_gro_solvated = output_path / "minimize_final_solvated.gro"
                 final_top_output = output_path / "topol.top"
-                
+
                 shutil.copy2(solvated_gro, final_gro_solvated)
                 shutil.copy2(solvated_top, final_top_output)
-                
+
                 click.echo(f"  Final structure (solvated): {final_gro_solvated.name}")
                 click.echo(f"  Final topology: {final_top_output.name}")
-                
+
                 # Build OpenMM system from solvated structure and save PDB
                 step_num += 1
                 click.echo(f"\n[Step {step_num}] Add chain label for structure for better visualization...")
                 final_pdb_solvated = output_path / "minimize_final_solvated.pdb"
-                
+
                 # Use OpenMM to read GRO and TOP, build system, and save PDB
                 # Force field files are already copied to output directory
                 gro_file = GromacsGroFile(solvated_gro)
@@ -545,7 +587,7 @@ class MinimizeSimulator:
                     nonbondedCutoff=1*unit.nanometer,
                     constraints=mm.app.HBonds
                 )
-                
+
                 # Save coordinates to PDB
                 with open(final_pdb_solvated, 'w') as f:
                     PDBFile.writeFile(
@@ -553,15 +595,24 @@ class MinimizeSimulator:
                         gro_file.getPositions(asNumpy=True),
                         f
                     )
-                
+
                 click.echo(f"  Final structure (PDB): {final_pdb_solvated.name}")
-                
+
                 result.output_pdb = str(final_pdb_solvated)
                 result.intermediate_files = minimize_result.get('intermediate_files', [])
             else:
-                result.output_pdb = str(final_pdb)
+                # No solvation - output is either the droplet box or the minimized structure
+                if droplet_box_pdb is not None:
+                    # Copy droplet box to final output
+                    final_boxed_gro = output_path / "minimize_final_box.gro"
+                    shutil.copy2(droplet_box_pdb, final_boxed_gro)
+                    click.echo(f"  Final structure (with box): {final_boxed_gro.name}")
+                    result.output_pdb = str(final_boxed_gro)
+                else:
+                    result.output_pdb = str(final_pdb)
+
                 result.intermediate_files = minimize_result.get('intermediate_files', [])
-            
+
             result.success = True
             
         except Exception as e:
@@ -702,9 +753,50 @@ class MinimizeSimulator:
         
         solvated_gro = str(solvate_dir / 'system_ions.gro')
         solvated_top = str(system_top)
-        
+
         return solvated_gro, solvated_top
-    
+
+    def build_droplet_box(self, structure_pdb: str, droplet_dir: Path,
+                          box_type: str, distance: float) -> str:
+        """
+        Build a solvent box around the structure using gmx editconf.
+
+        This is used for droplet simulations where the structure is placed
+        in a box with explicit water molecules.
+
+        Args:
+            structure_pdb: Input structure file (PDB or GRO)
+            droplet_dir: Directory for droplet box output
+            box_type: Box type (dodecahedron, cubic, octahedron)
+            distance: Distance between solute and box edge in nm
+
+        Returns:
+            Path to the output GRO file with box
+        """
+        # Convert input file to GRO format if needed
+        input_gro = droplet_dir / "input.gro"
+
+        editconf_cmd = [
+            'gmx', 'editconf',
+            '-f', str(structure_pdb),
+            '-o', str(input_gro),
+            '-bt', box_type,
+            '-d', str(distance),
+            '-c'  # Center molecule in box
+        ]
+
+        click.echo(f"  Running gmx editconf...")
+        click.echo(f"    Box type: {box_type}")
+        click.echo(f"    Distance: {distance} nm")
+
+        result = subprocess.run(editconf_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"gmx editconf failed: {result.stderr}")
+
+        click.echo(f"  Box built successfully")
+
+        return str(input_gro)
+
     def _create_em_mdp(self) -> str:
         """
         Create energy minimization MDP file content for solvation.
