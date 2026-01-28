@@ -102,6 +102,14 @@ components:
     ffasta: ../input/sequences.fasta
 ```
 
+The `sequences.fasta` file is provided with this tutorial, with the following content:
+
+```text
+>FUS_LC
+MASNDYTQQATQSYGAYPTQPGQGYSQQSSQPYGQQSYSGYSQSTDTSGYGQSSYSSYGQSQNTGYGTQSTPQGYGSTGGYGSSQSSQSSYGQQSSYPGYGQQPAPSSTSGSYGSSSQSSSYGQPQSGSYSQQPSYGGQQQSYGQQQSYNPPQGYGQQNQYNS
+```
+
+
 ## Step 2: Run CG simulation with `adapter cg`
 
 ```bash
