@@ -881,7 +881,13 @@ class CGSimulator:
         Returns:
             SASA array, or None if unavailable
         """
-        # Try cached file
+        # Try cached file (sasa_mdsim.txt from previous mdsim computation)
+        sasa_mdsim_file = os.path.join(self.output_dir or self.config.output_dir, 'sasa_mdsim.txt')
+        if os.path.exists(sasa_mdsim_file):
+            print(f"  Loading SASA data: {sasa_mdsim_file}")
+            return np.loadtxt(sasa_mdsim_file)
+
+        # Try legacy cached file
         surface_file = os.path.join(self.output_dir or self.config.output_dir, 'surface')
         if os.path.exists(surface_file):
             print(f"  Loading SASA data: {surface_file}")
@@ -898,6 +904,11 @@ class CGSimulator:
             sasa = self._compute_all_sasa_values()
             if sasa:
                 print(f"  Calculated {len(sasa)} SASA values")
+
+                # Save mdsim-computed SASA values as plain text
+                np.savetxt(sasa_mdsim_file, sasa, fmt='%.4f')
+                print(f"  Saved mdsim SASA values to: {sasa_mdsim_file}")
+
                 return np.array(sasa)
         except Exception as e:
             print(f"  SASA calculation failed: {e}")
@@ -2627,26 +2638,26 @@ Output Files:
     
     def _prepare_cocomo_output(self) -> Dict[str, str]:
         """
-        准备 COCOMO 输出目录
+        Prepare COCOMO output directory
 
-        输出目录结构：{output_dir}/ (CLI already sets self.output_dir = {system_name}_CG)
-        直接使用 self.output_dir，避免嵌套目录
+        Output directory structure: {output_dir}/ (CLI already sets self.output_dir = {system_name}_CG)
+        Use self.output_dir directly to avoid nested directories
         """
-        # CLI 已经设置了 self.output_dir = {system_name}_CG，直接使用
+        # CLI already sets self.output_dir = {system_name}_CG, use directly
         output_dir = self.output_dir
 
-        # 备份旧结果（仅在目录包含之前的模拟结果时）
+        # Backup old results (only when directory contains previous simulation results)
         import shutil
         from datetime import datetime
 
-        # 检查目录是否存在，以及是否包含之前的模拟结果
+        # Check if directory exists and contains previous simulation results
         should_backup = False
         if os.path.exists(output_dir):
-            # 检查是否有模拟结果文件（不是预平衡文件）
+            # Check for simulation result files (excluding pre-equilibration files)
             result_files = ['final.pdb', 'trajectory.xtc', 'simulation.log', 'system.xml']
             has_results = any(os.path.exists(os.path.join(output_dir, f)) for f in result_files)
             
-            # 只有当存在模拟结果时才备份（预平衡文件不算）
+            # Only backup if simulation results exist (pre-equilibration files don't count)
             if has_results:
                 should_backup = True
         
@@ -2654,11 +2665,11 @@ Output Files:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_dir = f"{output_dir}_backup_{timestamp}"
             shutil.move(output_dir, backup_dir)
-            print(f"  📁 备份旧结果到: {backup_dir}")
-            # 重新创建输出目录
+            print(f"  📁 Backing up old results to: {backup_dir}")
+            # Recreate output directory
             os.makedirs(output_dir, exist_ok=True)
         else:
-            # 目录不存在或只包含预平衡文件，直接创建（如果不存在）
+            # Directory doesn't exist or only contains pre-equilibration files, create directly if needed
             os.makedirs(output_dir, exist_ok=True)
 
         return {
@@ -2700,7 +2711,7 @@ Output Files:
         self._ensure_setup()
         self._ensure_not_running()
 
-        # 预平衡参数（可选）
+        # Pre-equilibration parameters (optional)
         preequil_steps = kwargs.get('preequil_steps', 100000)
         preequil_mapping = kwargs.get('preequil_mapping', 'ca')
         preequil_k_restraint = kwargs.get('preequil_k_restraint', 10000.0)
@@ -2712,7 +2723,7 @@ Output Files:
                 from openmm import Platform
                 Platform.getPlatformByName('CUDA')
             except Exception:
-                print(f"  ⚠️  CUDA 不可用，预平衡将使用 CPU")
+                print(f"  ⚠️  CUDA unavailable, pre-equilibration will use CPU")
                 preequil_platform = ComputePlatform.CPU
 
         preequil_pdb = self._run_pre_equilibration(
@@ -2724,9 +2735,9 @@ Output Files:
             platform=preequil_platform,
         )
         if preequil_pdb:
-            print(f"  [Mpipi] 使用预平衡结构: {preequil_pdb}")
+            print(f"  [Mpipi] Using pre-equilibrated structure: {preequil_pdb}")
 
-        # 输出目录
+        # Output directory
         dirs = self._prepare_mpipi_output()
         output_dir = dirs['output_dir']
 
@@ -2736,20 +2747,20 @@ Output Files:
         try:
             print(f"\n[Mpipi-Recharged] Running simulation...")
 
-            # 从 ms2_OpenMpipi 导入 biomolecule 类和新函数
+            # Import biomolecule class and new functions from ms2_OpenMpipi
             from CondenSimAdapter.extern.ms2_OpenMpipi import MDP, IDP, build_mpipi_recharged_system_from_chains
 
-            # 从 config.components 构建 biomolecule 对象
-            print("\n  构建 biomolecule 对象...")
+            # Build biomolecule objects from config.components
+            print("\n  Building biomolecule objects...")
             chain_objects = []
             for comp in self.config.components:
-                # 获取序列
+                # Get sequence
                 if comp.type == ComponentType.IDP:
-                    # IDP 从 fasta 读取序列
+                    # IDP reads sequence from FASTA
                     if comp.ffasta:
                         with open(comp.ffasta, 'r') as f:
                             fasta_content = f.read()
-                        # 解析 FASTA（只提取匹配组件名的序列）
+                        # Parse FASTA (only extract sequences matching component names)
                         lines = fasta_content.strip().split('\n')
                         sequence = None
                         current_seq_lines = []
@@ -2757,41 +2768,41 @@ Output Files:
                         
                         for line in lines:
                             if line.startswith('>'):
-                                # 如果上一段是我们要的序列，保存它
+                                # If the previous entry is the target sequence, save it
                                 if in_target_sequence:
                                     sequence = ''.join(current_seq_lines)
                                     break
-                                # 检查这一行是否是我们要找的序列
+                                # Check whether this line is the target sequence
                                 in_target_sequence = (comp.name in line.replace('>', '').strip())
                                 current_seq_lines = []
                             elif in_target_sequence:
                                 current_seq_lines.append(line.strip())
                         
-                        # 处理最后一个序列
+                        # Handle the last sequence
                         if sequence is None and in_target_sequence:
                             sequence = ''.join(current_seq_lines)
                         
                         if sequence is None:
-                            print(f"    ⚠️  {comp.name}: 未在 FASTA 中找到序列，跳过")
+                            print(f"    ⚠️  {comp.name}: sequence not found in FASTA, skipping")
                             continue
                     else:
                         continue
                     
-                    # 创建 IDP 对象
+                    # Create IDP object
                     idp = IDP(comp.name, sequence)
                     chain_objects.append((comp, idp))
                     print(f"    {comp.name}: IDP, {len(sequence)} residues")
 
                 elif comp.type == ComponentType.MDP:
-                    # MDP 从 fpdb 读取结构和序列
+                    # MDP reads structure and sequence from fpdb
                     if not comp.fpdb:
                         continue
                     
-                    # 解析 fdomains 获取折叠域索引
+                    # Parse fdomains to get folded-domain indices
                     domains = self._parse_fdomains(comp.fdomains)
                     
-                    # 从 PDB 读取序列（MDP 永远使用 PDB 中的序列）
-                    # 注意：PDB 残基名是三字母码，需要转换为单字母码
+                    # Read sequence from PDB (MDP always uses the PDB sequence)
+                    # Note: PDB residue names are three-letter codes; convert to one-letter codes
                     pdb_temp = PDBFile(comp.fpdb)
                     three_to_one = {
                         'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
@@ -2805,7 +2816,7 @@ Output Files:
                             sequence.append(three_to_one[res.name])
                     sequence = ''.join(sequence)
                     
-                    # 创建 MDP 对象
+                    # Create MDP object
                     mdp = MDP(comp.name, sequence, domains, comp.fpdb)
                     chain_objects.append((comp, mdp))
                     print(f"    {comp.name}: MDP, {len(sequence)} residues, {len(domains)} domains")
@@ -2813,30 +2824,30 @@ Output Files:
             if not chain_objects:
                 raise ValueError("No valid biomolecules could be constructed for Mpipi simulation.")
 
-            # 构建 chain_info 字典
-            print("\n  构建 chain_info 字典...")
+            # Build chain_info dict
+            print("\n  Building chain_info dict...")
             chain_info = {}
             for comp, biomol in chain_objects:
                 chain_info[biomol] = comp.nmol
                 print(f"    {comp.name}: {comp.nmol} copies")
 
-            # 调用 build_mpipi_recharged_system_from_chains
-            # 这个函数会：1) relax 每个单体 2) build model 3) 添加力场
+            # Call build_mpipi_recharged_system_from_chains
+            # This function will: 1) relax each monomer 2) build model 3) add force field
             csx = self.config.ionic * 1000  # M -> mM
-            is_periodic = True  # 所有拓扑类型都是周期性的
-            box_size = self.config.box  # 使用 config 指定的盒子大小
+            is_periodic = True  # All topology types are periodic
+            box_size = self.config.box  # Use box size from config
             
-            print("\n  构建 Mpipi-Recharged 系统（包含 relaxation + model building + 力场）...")
-            # 仅使用预平衡结构的坐标，不再做分子放置
+            print("\n  Building Mpipi-Recharged system (relaxation + model building + force field)...")
+            # Use only coordinates from pre-equilibrated structure; no molecular placement
             if not preequil_pdb or not os.path.exists(preequil_pdb):
                 raise FileNotFoundError(
-                    f"预平衡结构不存在: {preequil_pdb}. 请先生成 preequil_final.pdb"
+                    f"Pre-equilibrated structure not found: {preequil_pdb}. Please generate preequil_final.pdb first"
                 )
             use_gmx_insert = False
             use_grid_placement = False
-            gmx_radius = kwargs.get('gmx_radius', 0.35)  # 保留参数以兼容接口
+            gmx_radius = kwargs.get('gmx_radius', 0.35)  # Keep parameter for API compatibility
             verbose = kwargs.get('verbose', True)
-            print("  使用预平衡坐标，不再进行放置")
+            print("  Using pre-equilibrated coordinates; skipping placement")
             
             system, model = build_mpipi_recharged_system_from_chains(
                 chain_info=chain_info,
@@ -2846,27 +2857,27 @@ Output Files:
                 csx=csx,
                 CM_remover=True,
                 periodic=is_periodic,
-                use_gmx_insert=use_gmx_insert,  # 使用 gmx insert-molecules
+                use_gmx_insert=use_gmx_insert,  # Use gmx insert-molecules
                 use_grid_placement=use_grid_placement,
-                gmx_radius=gmx_radius,  # 最小距离
+                gmx_radius=gmx_radius,  # Minimum distance
                 verbose=verbose
             )
-            print(f"  系统构建完成: {system.getNumParticles()} 粒子, {system.getNumForces()} 力")
+            print(f"  System built: {system.getNumParticles()} particles, {system.getNumForces()} forces")
 
-            # 从 model 获取 topology 和 positions
+            # Get topology and positions from model
             topology = model.topology
             positions = model.positions
 
-            # 使用预平衡结构坐标
-            print(f"  从预平衡结构读取初始坐标: {preequil_pdb}")
+            # Use pre-equilibrated structure coordinates
+            print(f"  Reading initial coordinates from pre-equilibrated structure: {preequil_pdb}")
             pdb = PDBFile(preequil_pdb)
             pre_positions = pdb.getPositions(asNumpy=True)
             model_atom_count = sum(1 for _ in model.topology.atoms())
             if len(pre_positions) != model_atom_count:
                 raise ValueError(
-                    f"预平衡结构原子数 ({len(pre_positions)}) 与模型原子数 ({model_atom_count}) 不匹配"
+                    f"Pre-equilibrated atom count ({len(pre_positions)}) does not match model atom count ({model_atom_count})"
                 )
-            print(f"  ✓ 坐标数量匹配: {len(pre_positions)} 原子")
+            print(f"  ✓ Coordinate count matches: {len(pre_positions)} atoms")
             positions = pre_positions
             
             if _is_droplet_topology(self.config.topol):
@@ -2880,45 +2891,45 @@ Output Files:
                 )
                 print(f"  Droplet confinement enabled (k={DROPLET_FORCE_K}, stride={DROPLET_FORCE_STRIDE})")
 
-            # 如果只需要返回 system，不运行模拟
+            # If only system is needed, skip simulation
             if return_system:
-                print(f"\n  [return_system=True] 返回系统，跳过模拟")
+                print(f"\n  [return_system=True] Returning system, skipping simulation")
                 self.is_running = False
                 return system, topology, positions
 
-            # 创建 Simulation 对象 (优先使用config指定的platform)
+            # Create Simulation object (prefer platform specified in config)
             config_platform = self.config.simulation.platform
             platform_name = config_platform.value if hasattr(config_platform, 'value') else str(config_platform)
             
-            # 平台选择：优先使用config指定的平台，支持自动回退
+            # Platform selection: prefer config platform, support fallback
             if gpu_id >= 0:
-                # 用户想要使用GPU
+                # User wants GPU
                 try:
                     platform = Platform.getPlatformByName(platform_name)
                     properties = {'DeviceIndex': str(gpu_id)}
-                    print(f"  使用 {platform_name} 平台 (GPU {gpu_id})")
+                    print(f"  Using {platform_name} platform (GPU {gpu_id})")
                 except Exception:
-                    # 尝试其他GPU平台
+                    # Try other GPU platforms
                     for fallback in ['CUDA', 'OpenCL']:
                         if fallback != platform_name:
                             try:
                                 platform = Platform.getPlatformByName(fallback)
                                 properties = {'DeviceIndex': str(gpu_id)}
-                                print(f"  {platform_name} 不可用，回退到 {fallback}")
+                                print(f"  {platform_name} unavailable, falling back to {fallback}")
                                 break
                             except:
                                 continue
                     else:
-                        print(f"  GPU 不可用，回退到 CPU")
+                        print(f"  GPU unavailable, falling back to CPU")
                         platform = Platform.getPlatformByName('CPU')
                         properties = {}
             else:
-                # 用户想要使用CPU
+                # User wants CPU
                 platform = Platform.getPlatformByName('CPU')
                 properties = {}
-                print("  使用 CPU 平台")
+                print("  Using CPU platform")
 
-            # 使用 LangevinMiddleIntegrator（与 test_100_molecules.py 一致）
+            # Use LangevinMiddleIntegrator (consistent with test_100_molecules.py)
             temperature = self.config.temperature
             integrator = LangevinMiddleIntegrator(
                 temperature * kelvin,
@@ -2934,11 +2945,11 @@ Output Files:
                 platformProperties=properties
             )
 
-            # 设置初始坐标：使用预平衡结构的坐标
-            print("  使用预平衡结构坐标")
+            # Set initial coordinates: use pre-equilibrated structure coordinates
+            print("  Using pre-equilibrated structure coordinates")
             simulation.context.setPositions(positions)
 
-            # 如果系统有周期性边界，设置盒子向量
+            # If the system has PBC, set box vectors
             if is_periodic:
                 box_size = self.config.box
                 box_vecs = [
@@ -2948,7 +2959,7 @@ Output Files:
                 ] * unit.nanometer
                 simulation.context.setPeriodicBoxVectors(*box_vecs)
 
-            # 保存 minimization 前的结构（用于调试）
+            # Save structure before minimization (for debugging)
             debug_pdb_before_min = os.path.join(output_dir, 'before_minimization.pdb')
             with open(debug_pdb_before_min, 'w') as f:
                 PDBFile.writeFile(
@@ -2956,23 +2967,23 @@ Output Files:
                     positions,
                     f
                 )
-            print(f"  保存 minimization 前结构: {debug_pdb_before_min}")
+            print(f"  Saving structure before minimization: {debug_pdb_before_min}")
 
-            # 能量最小化（设置 tolerance=500 kJ/mol/nm）
+            # Energy minimization (tolerance=500 kJ/mol/nm)
             print("  Running energy minimization...")
             simulation.minimizeEnergy(tolerance=500 * unit.kilojoule_per_mole / unit.nanometer)
             print("  Energy minimization completed")
 
-            # 获取最小化后的状态和能量
+            # Get minimized state and energy
             state_after_min = simulation.context.getState(getPositions=True, getEnergy=True)
             energy_after_min = state_after_min.getPotentialEnergy()
             print(f"  Minimization energy: {energy_after_min}")
 
-            # 检查能量是否为 NaN
+            # Check energy for NaN
             if np.isnan(energy_after_min.value_in_unit(unit.kilojoule_per_mole)):
                 raise RuntimeError("Energy minimization failed: NaN energy")
 
-            # 保存最小化后的结构
+            # Save structure after minimization
             positions_after_min = state_after_min.getPositions()
             debug_pdb_after_min = os.path.join(output_dir, 'after_minimization.pdb')
             with open(debug_pdb_after_min, 'w') as f:
@@ -2981,14 +2992,14 @@ Output Files:
                     positions_after_min,
                     f
                 )
-            print(f"  保存 minimization 后结构: {debug_pdb_after_min}")
+            print(f"  Saving structure after minimization: {debug_pdb_after_min}")
 
-            # 运行模拟
+            # Run simulation
             wfreq = self.config.simulation.wfreq
             xtc_file = os.path.join(output_dir, 'trajectory.xtc')
             log_file = os.path.join(output_dir, 'simulation.log')
 
-            # 添加报告器
+            # Add reporters
             simulation.reporters.append(
                 XTCReporter(xtc_file, wfreq)
             )
@@ -3005,9 +3016,9 @@ Output Files:
                 )
             )
 
-            # 运行模拟（使用 tqdm 显示进度）
+            # Run simulation (show progress with tqdm)
             total_steps = self.config.simulation.steps
-            print(f"  开始模拟: {total_steps} 步")
+            print(f"  Starting simulation: {total_steps} steps")
 
             from tqdm import tqdm
             n_batches = 10
@@ -3017,14 +3028,14 @@ Output Files:
                 simulation.step(batch_size)
                 simulation.saveCheckpoint(os.path.join(output_dir, 'restart.chk'))
 
-            # 处理剩余步数
+            # Handle remaining steps
             remaining = total_steps % n_batches
             if remaining > 0:
                 simulation.step(remaining)
 
-            print(f"  模拟完成!")
+            print(f"  Simulation finished!")
 
-            # 获取最终状态（包含 PBC 信息）
+            # Get final state (including PBC info)
             state_final = simulation.context.getState(
                 getPositions=True,
                 getVelocities=True,
@@ -3033,18 +3044,18 @@ Output Files:
                 enforcePeriodicBox=True
             )
 
-            # 获取最终的位置和盒子向量
+            # Get final positions and box vectors
             positions_final = state_final.getPositions()
             box_vectors = state_final.getPeriodicBoxVectors()
 
-            # 在拓扑上设置盒子向量
+            # Set box vectors on topology
             simulation.topology.setPeriodicBoxVectors(box_vectors)
 
-            # 保存最终结构为 PDB 格式（包含成键信息 - CONECT 记录）
+            # Save final structure as PDB (including bonds - CONECT records)
             final_pdb = os.path.join(output_dir, 'final.pdb')
             final_pdb_mpipi_format = os.path.join(output_dir, 'final_mpipi_format.pdb')
             
-            # 先保存 mpipi 格式的 PDB（pA, pG 等格式）
+            # Save mpipi-format PDB first (pA, pG, etc.)
             with open(final_pdb_mpipi_format, 'w') as f:
                 PDBFile.writeFile(
                     simulation.topology,
@@ -3052,50 +3063,50 @@ Output Files:
                     f,
                     keepIds=True
                 )
-            print(f"  保存 mpipi 格式 PDB: {final_pdb_mpipi_format}")
+            print(f"  Saving mpipi-format PDB: {final_pdb_mpipi_format}")
 
-            # 后处理：将 mpipi 格式的 PDB 转换为 calvados 格式（CA + 三字母代码）
-            print(f"\n  后处理 PDB 格式转换...")
+            # Post-process: convert mpipi-format PDB to calvados format (CA + three-letter codes)
+            print(f"\n  Post-processing PDB format conversion...")
             try:
                 final_pdb_calvados_format = self._convert_mpipi_pdb_to_calvados_format(
                     mpipi_pdb=final_pdb_mpipi_format,
                     output_pdb=final_pdb
                 )
-                print(f"  ✓ PDB 格式转换完成: {final_pdb_calvados_format}")
-                print(f"  - 原始 mpipi 格式: {final_pdb_mpipi_format}")
-                print(f"  - Calvados 格式: {final_pdb}")
+                print(f"  ✓ PDB format conversion complete: {final_pdb_calvados_format}")
+                print(f"  - Original mpipi format: {final_pdb_mpipi_format}")
+                print(f"  - Calvados format: {final_pdb}")
             except Exception as e:
-                print(f"  ⚠️  PDB 格式转换失败: {e}")
-                print(f"  保留原始 mpipi 格式的 PDB: {final_pdb_mpipi_format}")
-                # 如果转换失败，将 mpipi 格式复制为 final.pdb
+                print(f"  ⚠️  PDB format conversion failed: {e}")
+                print(f"  Keeping original mpipi-format PDB: {final_pdb_mpipi_format}")
+                # If conversion fails, copy mpipi format as final.pdb
                 import shutil
                 shutil.copy2(final_pdb_mpipi_format, final_pdb)
                 import traceback
                 traceback.print_exc()
 
-            # 复制 final.pdb 到根目录（self.output_dir = {system_name}_CG）
+            # Copy final.pdb to root directory (self.output_dir = {system_name}_CG)
             import shutil
             final_pdb_root = os.path.join(self.output_dir, 'final.pdb')
             shutil.copy2(final_pdb, final_pdb_root)
-            print(f"  复制最终结构到根目录: {final_pdb_root}")
+            print(f"  Copying final structure to root directory: {final_pdb_root}")
 
-            # 复制文件到标准位置
+            # Copy file to standard location
             shutil.copy(final_pdb, os.path.join(output_dir, 'preequil_final.pdb'))
 
-            # 保存系统 XML
+            # Save system XML
             system_xml = os.path.join(output_dir, 'system.xml')
             with open(system_xml, 'w') as f:
                 f.write(mm.XmlSerializer.serialize(system))
 
-            # 保存检查点
+            # Save checkpoint
             shutil.copy(os.path.join(output_dir, 'restart.chk'), os.path.join(output_dir, 'final.chk'))
 
-            # 打印结果摘要
+            # Print result summary
             print(f"\n  ✓ Simulation completed!")
             print(f"  Final structure: {final_pdb}")
             print(f"  Trajectory: {xtc_file}")
             
-            # 打印最终能量
+            # Print final energy
             final_energy = state_final.getPotentialEnergy()
             print(f"  Final potential energy: {final_energy}")
             print(f"  Final energy per particle: {final_energy.value_in_unit(unit.kilojoule_per_mole) / system.getNumParticles():.3f} kJ/mol")
@@ -3123,69 +3134,69 @@ Output Files:
     
     def _build_globular_indices_dict(self) -> Dict[str, list]:
         """
-        从 config.components 构建 globular_indices_dict
+        Build globular_indices_dict from config.components
 
-        用于 OpenMpipi 的 get_mpipi_system 函数。
-        OpenMpipi 期望格式：{chain_id: [[start1, end1], [start2, end2], ...]}
-        其中每个 [start, end] 是一个折叠域的索引范围（inclusive）。
-        
-        注意：OpenMpipi 期望的是**局部索引**（相对于每个chain的0-based索引），
-        而不是全局系统索引。
+        Used for the OpenMpipi get_mpipi_system function.
+        OpenMpipi expects format: {chain_id: [[start1, end1], [start2, end2], ...]}
+        Each [start, end] is an inclusive index range of a folded domain.
+
+        Note: OpenMpipi expects **local indices** (0-based per chain),
+        not global system indices.
 
         Returns:
             Dictionary mapping chain_id to list of domain ranges [start, end] (local indices)
         """
         globular_indices_dict = {}
 
-        # 获取链ID列表
+        # Get list of chain IDs
         chain_ids = self.get_chain_identifiers()
 
-        # 获取 folded domain 信息
+        # Get folded domain information
         folded_domains = self.get_folded_domains()
 
-        # 构建字典：{chain_id: [[start1, end1], [start2, end2], ...]}
-        # 首先收集所有链的起始位置（局部索引的基准）
+        # Build dict: {chain_id: [[start1, end1], [start2, end2], ...]}
+        # First collect start positions for each chain (local index baseline)
         chain_local_start = {}  # {chain_id: local_index_offset}
         
         for res_idx, chain_id in enumerate(chain_ids):
             if chain_id not in chain_local_start:
                 chain_local_start[chain_id] = res_idx
 
-        # 遍历每个残基，检测连续的 folded 区域（域范围）
+        # Traverse each residue to detect continuous folded regions (domain ranges)
         current_chain = None
-        domain_start = None  # 全局索引
-        domain_start_local = None  # 局部索引
+        domain_start = None  # Global index
+        domain_start_local = None  # Local index
 
         for res_idx, (chain_id, is_folded) in enumerate(zip(chain_ids, folded_domains)):
             if chain_id not in globular_indices_dict:
                 globular_indices_dict[chain_id] = []
 
-            # 新链开始，重置状态
+            # New chain starts, reset state
             if current_chain != chain_id:
                 if current_chain is not None and domain_start is not None:
-                    # 保存上一个域（使用局部索引）
+                    # Save previous domain (using local indices)
                     local_start = domain_start - chain_local_start[current_chain]
                     local_end = (res_idx - 1) - chain_local_start[current_chain]
                     globular_indices_dict[current_chain].append([local_start, local_end])
                 current_chain = chain_id
                 domain_start = None
 
-            # 如果是 folded domain，记录起始位置
+            # If folded domain, record start position
             if is_folded:
                 if domain_start is None:
                     domain_start = res_idx
             else:
-                # 如果之前在域中，现在结束了，保存域范围
+                # If was in domain, now ended; save domain range
                 if domain_start is not None:
                     local_start = domain_start - chain_local_start[chain_id]
                     local_end = (res_idx - 1) - chain_local_start[chain_id]
                     globular_indices_dict[chain_id].append([local_start, local_end])
                     domain_start = None
 
-        # 处理最后一个域（如果链末尾是 folded）
+        # Handle last domain (if chain ends folded)
         if current_chain is not None and domain_start is not None:
             local_start = domain_start - chain_local_start[current_chain]
-            # 局部索引的结束位置是该链的最后一个残基
+            # Local end index is the last residue of the chain
             chain_length = sum(1 for cid in chain_ids if cid == current_chain)
             local_end = chain_length - 1
             globular_indices_dict[current_chain].append([local_start, local_end])
@@ -3194,27 +3205,27 @@ Output Files:
 
     def _prepare_mpipi_output(self) -> Dict[str, str]:
         """
-        准备 Mpipi-Recharged 输出目录
+        Prepare Mpipi-Recharged output directory
 
-        输出目录结构：{output_dir}/Mpipi-Recharged/
-        CLI 已经设置了 self.output_dir = {system_name}_CG，直接使用
+        Output directory structure: {output_dir}/Mpipi-Recharged/
+        CLI already sets self.output_dir = {system_name}_CG; use directly
 
-        期望结构：
+        Expected structure:
         {system_name}_CG/
-        ├── Mpipi-Recharged/     # 主模拟输出
+        ├── Mpipi-Recharged/     # Main simulation output
         │   ├── trajectory.xtc
         │   ├── final.pdb
         │   └── ...
-        ├── final.pdb            # 复制到根目录
-        └── equilibration/       # 预平衡输出（由 _run_pre_equilibration 创建）
+        ├── final.pdb            # Copied to root directory
+        └── equilibration/       # Pre-equilibration output (created by _run_pre_equilibration)
             └── raw/
                 └── ...
         """
-        # CLI 已经设置了 self.output_dir = {system_name}_CG，直接使用
-        # Mpipi-Recharged 主模拟输出目录
+        # CLI already sets self.output_dir = {system_name}_CG; use directly
+        # Mpipi-Recharged main simulation output directory
         mpipi_dir = os.path.join(self.output_dir, 'Mpipi-Recharged')
 
-        # 备份旧结果
+        # Backup old results
         import shutil
         from datetime import datetime
 
@@ -3222,7 +3233,7 @@ Output Files:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_dir = f"{mpipi_dir}_backup_{timestamp}"
             shutil.move(mpipi_dir, backup_dir)
-            print(f"  📁 备份旧结果到: {backup_dir}")
+            print(f"  📁 Backing up old results to: {backup_dir}")
 
         os.makedirs(mpipi_dir, exist_ok=True)
 
@@ -3237,26 +3248,26 @@ Output Files:
 
     def _convert_mpipi_pdb_to_calvados_format(self, mpipi_pdb: str, output_pdb: str) -> str:
         """
-        将 mpipi_recharged 格式的 PDB 转换为 calvados 格式（CA + 三字母代码）
-        
-        使用 backmap 模块中的标准化函数。
-        
+        Convert mpipi_recharged-format PDB to calvados format (CA + three-letter codes)
+
+        Use the standardization function in the backmap module.
+
         Args:
-            mpipi_pdb: mpipi_recharged 输出的 PDB 文件路径
-            output_pdb: 输出 PDB 文件路径（会覆盖原文件）
-            
+            mpipi_pdb: mpipi_recharged output PDB file path
+            output_pdb: output PDB file path (overwrites)
+
         Returns:
-            输出 PDB 文件路径
+            Output PDB file path
         """
         from .backmap import standardize_pdb_with_calvados
         return standardize_pdb_with_calvados(mpipi_pdb, self.config, output_pdb)
 
     def get_result(self) -> Optional[SimulationResult]:
-        """获取最近的模拟结果"""
+        """Get latest simulation results"""
         return self._result
 
     def cleanup(self):
-        """清理临时文件"""
+        """Clean up temporary files"""
         self.is_setup = False
         self._result = None
 
@@ -3274,23 +3285,23 @@ Output Files:
         platform: Optional[ComputePlatform] = None,
     ) -> Optional[str]:
         """
-        单独运行预平衡（使用 CALVADOS 构建初始结构）
+        Run pre-equilibration only (build initial structure with CALVADOS)
 
-        此方法允许用户在不运行完整模拟的情况下，预先生成 CG 结构。
-        生成的 `preequil_final.pdb` 文件可用于后续的力场模拟。
+        This method allows users to pre-generate CG structure without running a full simulation.
+        The generated `preequil_final.pdb` file can be used for subsequent force-field simulations.
 
         Args:
-            gpu_id: GPU 设备 ID
-            steps: 预平衡步数（默认 100000）
-            mapping: 映射方式 ('ca' 或 'com')（默认 'ca'）
-            k_restraint: 约束力常数 (kJ/(mol·nm²))（默认 10000.0）
-            use_com: 是否使用 COM 约束（默认 True）
-            platform: 计算平台（CUDA 或 CPU），默认为 config 中的设置
+            gpu_id: GPU device ID
+            steps: pre-equilibration steps (default 100000)
+            mapping: mapping method ('ca' or 'com') (default 'ca')
+            k_restraint: restraint force constant (kJ/(mol·nm²)) (default 10000.0)
+            use_com: whether to use COM restraints (default True)
+            platform: compute platform (CUDA or CPU), default from config
 
         Returns:
-            预平衡后的结构文件路径，如果无 MDP 组件则返回 None
+            Path to pre-equilibrated structure file, or None if no MDP component
         """
-        # 如果未指定 platform，使用 config 中的值（默认为 CUDA）
+        # If platform not specified, use config value (default CUDA)
         if platform is None:
             platform = self.config.simulation.platform
 
@@ -3305,10 +3316,10 @@ Output Files:
 
     def get_pre_equilibrated_structure(self) -> Optional[str]:
         """
-        获取预平衡后的结构文件路径
+        Get path to pre-equilibrated structure file
 
         Returns:
-            预平衡结构文件路径，如果未运行预平衡则返回 None
+            Path to pre-equilibrated structure, or None if pre-equil not run
         """
         if self.output_dir is None:
             return None
