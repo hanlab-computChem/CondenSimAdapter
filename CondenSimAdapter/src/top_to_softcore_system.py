@@ -988,7 +988,7 @@ class GromacsTopFileWithSoftcore(object):
             - 0.85: Recommended for stable EM (default)
         soft_alpha_lj : float=0.85
             LJ soft-core alpha parameter (Gapsys paper recommends 0.85).
-            Controls the switching distance for LJ: r_sw_lj = alpha * 1.244 * sigma * (1-lambda)^1/6
+            Controls the switching distance for LJ: r_sw_lj = alpha * 1.1224 * sigma * (1-lambda)^1/6
         soft_alpha_coul : float=0.3
             Coulomb soft-core alpha parameter (Gapsys paper recommends 0.3).
             Controls the switching distance for Coulomb: r_sw_q = alpha * (1 + sigma_coul*|q1q2|) * (1-lambda)^1/6
@@ -2357,7 +2357,7 @@ def _create_gapsys_pair_force_expression(has_nbfix_terms=False):
         eps_eff = f"({c6_expr})*({c6_expr})/(4.0*({c12_expr}))"
         
         # LJ switching parameters
-        rsw_lj_inline = f"{sig_eff} * alpha_lj * 1.244 * {soft}"
+        rsw_lj_inline = f"{sig_eff} * alpha_lj * 1.1224 * {soft}"
         rsw_lj_safe_inline = f"max({rsw_lj_inline}, 1.0e-6)"
         rsw_lj_sq_inline = f"{rsw_lj_safe_inline}^2"
         u_lj_inline = f"{sig_eff} / {rsw_lj_safe_inline}"
@@ -2400,7 +2400,7 @@ lambda_val * (
         soft = "(1.0 - lambda_val)^0.1666667"
         
         # LJ parameters (inline)
-        rsw_lj_inline = f"{sig} * alpha_lj * 1.244 * {soft}"
+        rsw_lj_inline = f"{sig} * alpha_lj * 1.1224 * {soft}"
         rsw_lj_safe_inline = f"max({rsw_lj_inline}, 1.0e-6)"
         rsw_lj_sq_inline = f"{rsw_lj_safe_inline}^2"
         u_lj_inline = f"{sig} / {rsw_lj_safe_inline}"
@@ -2495,7 +2495,7 @@ def _create_gapsys_linearized_nb_force(nonbonded_cutoff, current_lambda=1.0,
         eps_eff = "(c6*c6)/(4.0*c12)"
         
         # LJ softcore switching distance
-        rsw_lj = f"({sig_eff} * alpha_lj * 1.244 * {soft_factor})"
+        rsw_lj = f"({sig_eff} * alpha_lj * 1.1224 * {soft_factor})"
         rsw_lj_safe = f"max({rsw_lj}, 1.0e-6)"
         rsw_lj_sq = f"({rsw_lj_safe} * {rsw_lj_safe})"
         u_lj = f"({sig_eff} / {rsw_lj_safe})"
@@ -2554,7 +2554,7 @@ c12 = (acoef(type1, type2))^2
         soft = "(1.0 - lambda_val)^0.1666667"
         
         # LJ parameters (inline)
-        rsw_lj_inline = f"{sig} * alpha_lj * 1.244 * {soft}"
+        rsw_lj_inline = f"{sig} * alpha_lj * 1.1224 * {soft}"
         rsw_lj_safe_inline = f"max({rsw_lj_inline}, 1.0e-6)"
         rsw_lj_sq_inline = f"{rsw_lj_safe_inline}^2"
         u_lj_inline = f"{sig} / {rsw_lj_safe_inline}"
@@ -2588,7 +2588,7 @@ sig = {sig};
 q_prod = {q_prod};
 soft_factor = {soft};
 
-rsw_lj = alpha_lj * 1.244 * sig * soft_factor;
+rsw_lj = alpha_lj * 1.1224 * sig * soft_factor;
 rsw_lj_safe = max(rsw_lj, 1.0e-6);
 rsw_lj_sq = rsw_lj_safe * rsw_lj_safe;
 u_lj = sig / rsw_lj_safe;

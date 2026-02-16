@@ -18,8 +18,7 @@ fi
 PYTHON_VERSION=$(${PYTHON_BIN} -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo "[1/6] Current Python version: ${PYTHON_VERSION}"
 
-# Local torch wheel path
-TORCH_WHEEL_PATH="${TORCH_WHEEL_PATH:-$(pwd)/Vender_packages/torch-2.1.2+cpu-cp311-cp311-linux_x86_64.whl}"
+# Local torch wheel path (deprecated - using online CPU version)
 
 if [ "$PYTHON_VERSION" != "3.11" ]; then
     echo "⚠️  Warning: Python 3.11 is recommended, current version is ${PYTHON_VERSION}"
@@ -79,27 +78,11 @@ fi
 
 echo "[3/6] Installing PyTorch stack (CPU)..."
 
-# Decide whether to use local torch wheel
-USE_LOCAL_TORCH=0
-if [ "$PYTHON_VERSION" = "3.11" ] && [ -f "$TORCH_WHEEL_PATH" ]; then
-    echo "  Using local torch wheel: ${TORCH_WHEEL_PATH}"
-    USE_LOCAL_TORCH=1
-elif [ "$PYTHON_VERSION" = "3.11" ] && [ ! -f "$TORCH_WHEEL_PATH" ]; then
-    echo "  ⚠️  Local torch wheel not found: ${TORCH_WHEEL_PATH}"
-    echo "  Falling back to online install..."
-fi
-
-if [ "$USE_LOCAL_TORCH" = "1" ]; then
-    # Install torch locally
-    pip install "${TORCH_WHEEL_PATH}"
-else
-    # Install torch from index
-    pip install \
-        torch==2.1.2 \
-        torchvision==0.16.2 \
-        torchaudio==2.1.2 \
-        --index-url https://download.pytorch.org/whl/cpu
-fi
+pip install \
+    torch==2.1.2 \
+    torchvision==0.16.2 \
+    torchaudio==2.1.2 \
+    --index-url https://download.pytorch.org/whl/cpu
 
 pip install numpy==1.26.4 scipy==1.14.1 click pydantic
 
