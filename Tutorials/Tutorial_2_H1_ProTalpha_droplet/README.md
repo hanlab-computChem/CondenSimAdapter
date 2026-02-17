@@ -244,8 +244,94 @@ The resulting solvated system is illustrated below. As shown, the droplet is per
 
 ## Step 6: Using Q-based CV to refine structured domain with plumed
 
-To be implemented.
+### Theory: Native Contact Constraints for MDPs
+
+To prevent the disruption of folded structures in multidomain proteins (MDPs) during aggressive equilibration, CondenSimAdapter implements restraints based on the **Fraction of Native Contacts (Q)**. As a well-established collective variable for protein folding transitions [2], Q has become a standard choice for maintaining structural integrity in multiscale condensate simulations .
+
+The order parameter Q is defined as:
+
+$$Q = \frac{1}{N_{\text{pairs}}}\sum_{(i,j) \in \Omega} \frac{1}{1 + \exp[\beta(r_{ij} - r_{ij}^0)]}$$
+
+where:
+- $\Omega$ denotes the set of heavy atom pairs in contact in the structured domain
+- $r_{ij}^0$ represents the native distance
+- $\beta$ is a steepness parameter
+
+Obviously, when Q = 1, the inter-residue contacts in the system exactly match those of the reference structure. As Q approaches 0, the native contacts are progressively lost. This indicates that, in general, the closer Q is to 1, the smaller the RMSD; conversely, the closer Q is to 0, the larger the RMSD.
+
+CondenSimAdapter automates the construction of these restraints by generating PLUMED-compatible CV definitions, enabling biased simulations to better preserve the native structures of the structured domains during equilibration.
+
+### Practical Implementation
+
+When running `adapter minimize` on a system containing MDPs, a `plumed.dat` file is automatically generated. It defines a number of CVs equal to `nmol * n_domain_per_mol`, and applies a harmonic potential with a reference value of 1 to restrain the Q value.
+
+The generated `plumed.dat` file uses the `CONTACTMAP` collective variable to define native contacts for each domain in the system. Each contact is weighted and summed to produce the overall Q value for that domain. Here is an example of the generated file:
+
+```plumed
+plumed.dat
+CONTACTMAP  ...
+ATOMS1=9642,9666   SWITCH1={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.41490840288923303 } WEIGHT1=0.0006949270326615705
+ATOMS2=9644,9682   SWITCH2={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.4172685186026254 } WEIGHT2=0.0006949270326615705
+ATOMS3=9644,9676   SWITCH3={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.37585368043641804 } WEIGHT3=0.0006949270326615705
+ATOMS4=9644,9674   SWITCH4={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.41246096221234085 } WEIGHT4=0.0006949270326615705
+ATOMS5=9644,9673   SWITCH5={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.4147203629696675 } WEIGHT5=0.0006949270326615705
+
+......
+
+ATOMS1437=23282,23294 SWITCH1437={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.3478549610854117 } WEIGHT1437=0.0006949270326615705
+ATOMS1438=23283,23296 SWITCH1438={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.43487350922387275 } WEIGHT1438=0.0006949270326615705
+ATOMS1439=23283,23294 SWITCH1439={Q R_0=0.01 BETA=20 LAMBDA=1.5 REF=0.31462671559973643 } WEIGHT1439=0.0006949270326615705
+LABEL=Q4
+SUM
+... CONTACTMAP
+
+PRINT ARG=Q4 FILE=COLVAR4
+
+RESTRAINT ARG=Q0 AT=1.0 KAPPA=10000 SLOPE=0.
+RESTRAINT ARG=Q1 AT=1.0 KAPPA=10000 SLOPE=0.
+RESTRAINT ARG=Q2 AT=1.0 KAPPA=10000 SLOPE=0.
+RESTRAINT ARG=Q3 AT=1.0 KAPPA=10000 SLOPE=0.
+RESTRAINT ARG=Q4 AT=1.0 KAPPA=10000 SLOPE=0.
+```
+
+In this example:
+- `CONTACTMAP` defines the native contacts with atom indices, switch functions, and reference values
+- Each `Q0-Q4` represents the fraction of native contacts for first domains(each H1 monomer have one structured domain)
+- `RESTRAINT` applies harmonic potentials with force constant `KAPPA=10000` to keep Q values close to 1 (the native state)
+
+With the generated `plumed.dat` file, we can now run Q-based CV biased simulations using GROMACS patched with PLUMED. First, we perform energy minimization—this step does not require PLUMED. Next, we use an equilibration MD parameter file (NVT or NPT) to generate the tpr file for the equilibration phase. For example, the built-in `pr_plumed.mdp` in the `input` folder defines a 2 ns equilibration run at 300 K and 1 bar in the NPT ensemble. Run the following command to generate the tpr file:
+
+```bash
+gmx grompp -f pr_plumed.mdp -c em_cg.gro -p topol.top -o pr_plumed.tpr
+```
+
+Then, run `mdrun` to execute the Q-based biased simulation:
+
+```bash
+gmx mdrun -deffnm pr_plumed -plumed plumed.dat
+```
+
+Running this simulation requires a PLUMED-patched GROMACS. The simplest way is to compile GROMACS with `-DGMX_USE_PLUMED=ON` in version 2025 or later. For manual installation, please refer to the [PLUMED installation guide](https://www.plumed.org/doc-v2.10/user-doc/html/_installation.html).
+
+This run will generate `COLVAR{n}` files, which record the value of each collective variable over simulation time. For our case, there are 5 COLVAR files. The plot of all 5 CVs is shown below:
+
+![COLVAR plot](assets/COLVA_plot.png)
+
+As shown in the plot, for our system, the average Q values stabilize after the simulation time exceeds 1 ns.
+
+We also examined the backbone RMSD of the structured domains for the five H1 monomers in our system. Between 2-3 ns, we increased `KAPPA` from `10000` to `200000` to enhance the structural restraint. The RMSD of the system is shown below.
+
+![RMSD time plot](assets/rmsd_time_plot.png)
+
+As shown in the plot, with our default `KAPPA` value (0-2 ns), the RMSD of the system steadily decreases and finally stabilizes at around 0.15 nm. This is very similar to the RMSD behavior of this domain in condensates reported in Ref. [1] (minimum RMSD between 0.15-0.2 nm over 6 μs). When `KAPPA` is increased to 200000, the RMSD decreases more rapidly, with the Q value reaching approximately 0.97.
+
+![RMSD comparison with paper](assets/RMSD_paper.png)
+
+In practical applications, users can manually adjust the `KAPPA` value based on how much they want to restrain the system during the equilibration phase. Of course, considering that protein structured domains, especially their loop regions, are inherently flexible, a `KAPPA` value in the range of 1000-10000 is generally recommended.
+
 
 ## Reference
 
 [1] **Extreme dynamics in a biomolecular condensate**  N. Galvanetto, M.T. Ivanović, A. Chowdhury, et al.  *Nature* **619**, 876–883 (2023)  DOI: [10.1038/s41586-023-06329-5](https://doi.org/10.1038/s41586-023-06329-5)
+
+[2] **Native contacts determine protein folding mechanisms in atomistic simulations** R. B. Best, G. Hummer, W. A. Eaton. *Proc. Natl. Acad. Sci.* **110**, 17874–17879 (2013) DOI: [10.1073/pnas.1311599110](https://doi.org/10.1073/pnas.1311599110)
