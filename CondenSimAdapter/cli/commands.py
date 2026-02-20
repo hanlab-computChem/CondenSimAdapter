@@ -29,6 +29,7 @@ from .commands_refactored import (
     minimize_command,
     info_command,
     droplet_density_command,
+    to_run_command,
 )
 
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     'minimize_command',
     'info_command',
     'droplet_density_command',
+    'to_run_command',
 ]

@@ -8,6 +8,7 @@ A workflow for CG and AA protein condensate simulation.
         cg               Run coarse-grained simulation
         backmap          Backmap CG structure to all-atom representation
         minimize         Energy minimization with AMBER/CHARMM force fields
+        to_run           Generate production run scripts for minimize output
 
     Utility Commands:
         init             Initialize a new configuration template
@@ -75,7 +76,7 @@ if _stderr_fileno is not None and not os.environ.get('FORCE_ADAPTER_STDERR', '')
 
 import click
 
-from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command
+from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command, to_run_command
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
@@ -88,6 +89,7 @@ def main():
         cg               Run coarse-grained simulation
         backmap          Backmap CG structure to all-atom representation
         minimize         Energy minimization with AMBER/CHARMM force fields
+        to_run           Generate production run scripts for minimize output
 
     \b
     UTILITY COMMANDS:
@@ -111,6 +113,7 @@ def main():
         2. adapter cg -f config.yaml            # Run CG simulation
         3. adapter backmap -i output_CG -f config.yaml  # Backmap to all-atom
         4. adapter minimize -i output_backmap -f config.yaml  # Minimize
+        5. adapter to_run -f config.yaml        # Generate production run scripts
 
     \b
     Additional examples:
@@ -126,6 +129,7 @@ def main():
 main.add_command(cg_command, 'cg')
 main.add_command(backmap_command, 'backmap')
 main.add_command(minimize_command, 'minimize')
+main.add_command(to_run_command, 'to_run')
 
 # Utility commands
 main.add_command(init_command, 'init')

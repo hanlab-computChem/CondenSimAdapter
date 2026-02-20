@@ -12,6 +12,7 @@ from .pace_opt_command import pace_opt_command
 from .minimize_command import minimize_command
 from .info_command import info_command
 from .droplet_density_command import droplet_density_command
+from .to_run_command import to_run_command
 
 __all__ = [
     'init_command',
@@ -21,4 +22,5 @@ __all__ = [
     'minimize_command',
     'info_command',
     'droplet_density_command',
+    'to_run_command',
 ]
