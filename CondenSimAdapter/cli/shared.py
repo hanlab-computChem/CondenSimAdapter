@@ -79,11 +79,17 @@ def validate_cg_force_field(ctx, param, value):
 MINIMIZE_FORCE_FIELDS = list_force_fields()
 
 
+def get_minimize_force_fields() -> List[str]:
+    """Return up-to-date all-atom force field names from registry."""
+    return list_force_fields()
+
+
 def validate_minimize_force_field(ctx, param, value):
     """Validate minimize force field name using registry.
     
     Supports:
     - Short number: "1", "2", etc. (converts to CLI name format)
+    - Custom short id: "a1", "a2", etc.
     - CLI name: "1-a99SBdisp", "2-amber03wsc", etc.
     - pdb2gmx name: "a99SBdisp", "amber03wsc", "charmm36m", etc.
     """

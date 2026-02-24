@@ -41,7 +41,7 @@ def _print_help(ctx, param, value):
     type=str,
     default='1-a99SBdisp',
     callback=None,  # Will be set in function
-    help='Force field for minimization. Use number (1-9) or full name.\n'
+    help='Force field for minimization. Use built-in number (1-9), full name, or custom id (aN).\n'
          '  1-a99SBdisp (recommended)\n'
          '  2-amber03wsc (recommended)\n'
          '  3-amber99sbws-stqp (recommended)\n'
@@ -51,6 +51,7 @@ def _print_help(ctx, param, value):
          '  7-amber99sb-ildn\n'
          '  8-amber14sb\n'
          '  9-charmm36m\n'
+         '  a1/a2/... (custom force fields added via adapter forcefield add)\n'
          'Default: 1 (a99SBdisp)',
 )
 @optgroup.option(
@@ -174,6 +175,7 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
         7. amber99sb-ildn:    AMBER99SB-ILDN with tip3p (default)
         8. amber14sb:         AMBER14SB with tip3p
         9. charmm36m:         CHARMM36-jul2021 with tip3p
+        aN. custom:           user-registered force field via `adapter forcefield add`
 
     \b
     Optimization levels:
@@ -186,6 +188,7 @@ def minimize_command(input, input_file, output, force_field, device, gpu_id, lev
         adapter minimize -i TDP43_backmap -f config.yaml  # From backmap output
         adapter minimize -i my_structure.pdb -f config.yaml  # From user PDB
         adapter minimize -i TDP43_backmap -f config.yaml --force-field 9  # CHARMM36
+        adapter minimize -i TDP43_backmap -f config.yaml --force-field a1  # Custom force field
         adapter minimize -i TDP43_backmap -f config.yaml --level low  # Fast mode
         adapter minimize -i TDP43_backmap -f config.yaml -d cpu  # Use CPU
         adapter minimize -i TDP43_backmap -f config.yaml --gpu-id 1  # GPU 1

@@ -63,7 +63,6 @@ def standardize_pdb_with_calvados(pdb_path: str, config: CGSimulationConfig, out
         pdb_path: Input PDB path
         config: CGSimulationConfig (contains component info)
         output_pdb: Output PDB path
-        
     Returns:
         Output PDB path
     """
@@ -518,12 +517,24 @@ class BackmapSimulator:
         if not config or not config.components:
             raise ValueError("User provided mode requires config with components")
         
-        # 1. Use calvados to build standardized PDB
-        temp_standardized = tempfile.mktemp(suffix='.pdb', prefix='standardized_')
-        standardized_pdb = standardize_pdb_with_calvados(pdb_path, config, temp_standardized)
+        # Check if user specified Martini model.
+        user_model_type = self.backmap_config.model_type if self.backmap_config else None
+        is_martini = user_model_type in ['Martini', 'Martini3']
         
-        # 2. Select model type
-        model_type = self.select_model_type(config, force_field='calvados')
+        # 1. For Martini models, use input PDB directly and skip Calvados standardization.
+        if is_martini:
+            standardized_pdb = pdb_path
+        else:
+            temp_standardized = tempfile.mktemp(suffix='.pdb', prefix='standardized_')
+            standardized_pdb = standardize_pdb_with_calvados(
+                pdb_path, config, temp_standardized
+            )
+        
+        # 2. Select model type (use user's specification if provided)
+        if user_model_type and user_model_type != 'auto':
+            model_type = user_model_type
+        else:
+            model_type = self.select_model_type(config, force_field='calvados')
         
         return PreparedInput(
             pdb_path=standardized_pdb,

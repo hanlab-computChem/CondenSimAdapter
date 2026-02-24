@@ -31,7 +31,7 @@ import click
 )
 @click.option(
     '--model-type', '-m',
-    type=click.Choice(['ResidueBasedModel', 'CalphaBasedModel', 'auto']),
+    type=click.Choice(['ResidueBasedModel', 'CalphaBasedModel', 'martini2', 'martini3', 'auto']),
     help='CG model type (overrides config, default: auto-detect)',
 )
 def backmap_command(input, input_file, output, model_type):
@@ -48,6 +48,16 @@ def backmap_command(input, input_file, output, model_type):
         adapter backmap -i my_structure.pdb -f config.yaml  # User provided PDB
         adapter backmap -i TDP43_CG -f config.yaml -o ./results  # Custom output
     """
+    # Map CLI model names to library model names
+    model_name_map = {
+        'martini2': 'Martini',
+        'martini3': 'Martini3',
+    }
+    # Keep original for display
+    model_type_display = model_type
+    if model_type in model_name_map:
+        model_type = model_name_map[model_type]
+
     from ...src.backmap import BackmapSimulator, BackmapConfig
     from ...src import CGSimulationConfig
     from ...src.pdb2gmx_utils import load_config_from_yaml
@@ -96,8 +106,8 @@ def backmap_command(input, input_file, output, model_type):
     if output:
         click.echo(f"  Output: {output}")
     click.echo(f"  Device: cpu (fixed)")
-    if model_type:
-        click.echo(f"  Model: {model_type}")
+    if model_type_display:
+        click.echo(f"  Model: {model_type_display}")
     
     # Create backmap config (CLI parameters take priority)
     backmap_config = BackmapConfig()

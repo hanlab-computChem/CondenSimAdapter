@@ -11,9 +11,12 @@ This registry supports numbered selection:
 3. amber99sbws-stqp  6. des-amber-sf1.0  9. charmm36m
 """
 
-from dataclasses import dataclass, field
+import json
+import re
+import shutil
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 
 # =============================================================================
@@ -40,6 +43,14 @@ class ForceFieldInfo:
     solvate_cs: str
     gbsa_mapping: str
     description: str = ""
+    source: str = "builtin"  # "builtin" or "custom"
+    ff_dir: Optional[str] = None  # Relative or absolute path to *.ff folder
+
+
+# User force field storage under source tree
+CUSTOM_FORCEFIELD_DIR = Path(__file__).parent / "custom"
+CUSTOM_FORCEFIELD_INDEX = Path(__file__).parent / "user_forcefields.json"
+CUSTOM_ID_PATTERN = re.compile(r"^a([1-9][0-9]*)$")
 
 
 # =============================================================================
@@ -166,8 +177,10 @@ class ForceFieldRegistry:
         """Initialize the registry with built-in force fields."""
         self._force_fields: Dict[str, ForceFieldInfo] = {}
         self._pdb2gmx_index: Dict[str, str] = {}  # Map pdb2gmx_name to CLI name
+        self._custom_force_fields: Dict[str, ForceFieldInfo] = {}
         
         for ff in BUILTIN_FORCE_FIELDS:
+            ff.source = "builtin"
             # Store CLI name (e.g., "1-a99SBdisp") in lowercase for case-insensitive lookup
             self._force_fields[ff.name.lower()] = ff
             # Also map by pdb2gmx_name for convenience
@@ -175,6 +188,100 @@ class ForceFieldRegistry:
             # Add charmm36m as an alias for charmm36-jul2021
             if ff.pdb2gmx_name == "charmm36-jul2021":
                 self._pdb2gmx_index["charmm36m"] = ff.name.lower()
+
+        self._load_custom_force_fields()
+
+    def _custom_id_key(self, ff_name: str) -> int:
+        """Return numeric part for custom id sorting (a1, a2, ...)."""
+        match = CUSTOM_ID_PATTERN.match(ff_name.lower())
+        return int(match.group(1)) if match else 0
+
+    def _to_index_data(self, ff: ForceFieldInfo) -> Dict[str, Any]:
+        """Serialize custom force field for JSON index."""
+        return {
+            "id": ff.name,
+            "family": ff.family,
+            "pdb2gmx_name": ff.pdb2gmx_name,
+            "water_model": ff.water_model,
+            "solvate_cs": ff.solvate_cs,
+            "gbsa_mapping": ff.gbsa_mapping,
+            "description": ff.description,
+            "ff_dir": ff.ff_dir,
+        }
+
+    def _from_index_data(self, data: Dict[str, Any]) -> Optional[ForceFieldInfo]:
+        """Deserialize one custom force field record from JSON index."""
+        ff_id = str(data.get("id", "")).strip().lower()
+        if not CUSTOM_ID_PATTERN.match(ff_id):
+            return None
+
+        pdb2gmx_name = str(data.get("pdb2gmx_name", "")).strip()
+        if not pdb2gmx_name:
+            return None
+
+        ff_dir = data.get("ff_dir")
+        if ff_dir is None:
+            return None
+
+        ff = ForceFieldInfo(
+            name=ff_id,
+            family=str(data.get("family", "AMBER")).upper(),
+            pdb2gmx_name=pdb2gmx_name,
+            water_model=str(data.get("water_model", "tip3p")),
+            solvate_cs=str(data.get("solvate_cs", "spc216")),
+            gbsa_mapping=str(data.get("gbsa_mapping", "AMBER99SB-ILDN")),
+            description=str(data.get("description", "")),
+            source="custom",
+            ff_dir=str(ff_dir),
+        )
+        return ff
+
+    def _save_custom_force_fields(self) -> None:
+        """Persist custom force fields to source-tree JSON index."""
+        CUSTOM_FORCEFIELD_INDEX.parent.mkdir(parents=True, exist_ok=True)
+        records = [
+            self._to_index_data(ff)
+            for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
+        ]
+        with open(CUSTOM_FORCEFIELD_INDEX, "w", encoding="utf-8") as f:
+            json.dump({"force_fields": records}, f, indent=2, sort_keys=True)
+            f.write("\n")
+
+    def _load_custom_force_fields(self) -> None:
+        """Load custom force fields from source-tree JSON index."""
+        if not CUSTOM_FORCEFIELD_INDEX.exists():
+            return
+
+        try:
+            with open(CUSTOM_FORCEFIELD_INDEX, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception:
+            return
+
+        records = payload.get("force_fields", []) if isinstance(payload, dict) else []
+        if not isinstance(records, list):
+            return
+
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            ff = self._from_index_data(record)
+            if ff is None:
+                continue
+            if ff.name in self._force_fields:
+                continue
+            if ff.pdb2gmx_name.lower() in self._pdb2gmx_index:
+                continue
+            self._force_fields[ff.name] = ff
+            self._pdb2gmx_index[ff.pdb2gmx_name.lower()] = ff.name
+            self._custom_force_fields[ff.name] = ff
+
+    def _next_custom_id(self) -> str:
+        """Allocate next custom force field id (a1, a2, ...)."""
+        if not self._custom_force_fields:
+            return "a1"
+        max_id = max(self._custom_id_key(ff.name) for ff in self._custom_force_fields.values())
+        return f"a{max_id + 1}"
     
     def list_force_fields(self) -> List[str]:
         """List all available force field names.
@@ -182,7 +289,11 @@ class ForceFieldRegistry:
         Returns:
             List of force field names in order
         """
-        return [ff.name for ff in BUILTIN_FORCE_FIELDS]
+        builtin_names = [ff.name for ff in BUILTIN_FORCE_FIELDS]
+        custom_names = [
+            ff.name for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
+        ]
+        return builtin_names + custom_names
     
     def list_by_family(self, family: str) -> List[str]:
         """List force field names by family.
@@ -194,10 +305,13 @@ class ForceFieldRegistry:
             List of force field names in the family (in order)
         """
         family = family.upper()
-        return [
-            ff.name for ff in BUILTIN_FORCE_FIELDS
+        builtin_names = [ff.name for ff in BUILTIN_FORCE_FIELDS if ff.family.upper() == family]
+        custom_names = [
+            ff.name
+            for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
             if ff.family.upper() == family
         ]
+        return builtin_names + custom_names
     
     def get_force_field(self, name: str) -> Optional[ForceFieldInfo]:
         """Get force field information by name.
@@ -222,6 +336,10 @@ class ForceFieldRegistry:
                 if ff.name.startswith(f"{name_lower}-"):
                     return ff
             return None
+
+        # Handle custom short id format (e.g., "a1")
+        if CUSTOM_ID_PATTERN.match(name_lower) and name_lower in self._force_fields:
+            return self._force_fields[name_lower]
         
         # Try direct lookup first (for "1-a99SBdisp")
         if name_lower in self._force_fields:
@@ -233,6 +351,106 @@ class ForceFieldRegistry:
             return self._force_fields[cli_name]
         
         return None
+
+    def list_custom_force_fields(self) -> List[str]:
+        """List user-registered custom force field ids (a1, a2, ...)."""
+        return [
+            ff.name for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
+        ]
+
+    def register_custom_force_field(
+        self,
+        ff_dir: str,
+        pdb2gmx_name: Optional[str] = None,
+        family: str = "AMBER",
+        water_model: str = "tip3p",
+        solvate_cs: str = "spc216",
+        gbsa_mapping: Optional[str] = None,
+        description: str = "",
+    ) -> ForceFieldInfo:
+        """Register a custom all-atom force field and persist metadata.
+
+        Args:
+            ff_dir: Path to source *.ff directory
+            pdb2gmx_name: Name used by gmx pdb2gmx (defaults to ff_dir stem)
+            family: Force field family (AMBER or CHARMM)
+            water_model: Water model for pdb2gmx
+            solvate_cs: Water model for gmx solvate -cs
+            gbsa_mapping: GBSA mapping identifier (optional, inferred from family if omitted)
+            description: Human-readable description
+
+        Returns:
+            Registered ForceFieldInfo with allocated id (aN)
+        """
+        src_dir = Path(ff_dir).expanduser().resolve()
+        if not src_dir.exists() or not src_dir.is_dir():
+            raise ValueError(f"Force field directory does not exist: {src_dir}")
+        if src_dir.suffix != ".ff":
+            raise ValueError("Force field directory must end with '.ff'")
+        if not (src_dir / "forcefield.itp").exists():
+            raise ValueError(f"Missing required file: {(src_dir / 'forcefield.itp')}")
+
+        family_normalized = family.upper()
+        if family_normalized not in {"AMBER", "CHARMM"}:
+            raise ValueError(f"Unsupported family: {family}. Must be AMBER or CHARMM.")
+        if gbsa_mapping is None:
+            gbsa_mapping = "AMBER99SB-ILDN" if family_normalized == "AMBER" else "CHARMM36"
+
+        inferred_name = src_dir.name[:-3] if src_dir.name.endswith(".ff") else src_dir.name
+        ff_pdb2gmx_name = (pdb2gmx_name or inferred_name).strip()
+        if not ff_pdb2gmx_name:
+            raise ValueError("pdb2gmx_name cannot be empty")
+        if ff_pdb2gmx_name.lower() in self._pdb2gmx_index:
+            existing = self._pdb2gmx_index[ff_pdb2gmx_name.lower()]
+            raise ValueError(f"pdb2gmx_name '{ff_pdb2gmx_name}' already exists as '{existing}'")
+
+        custom_id = self._next_custom_id()
+        CUSTOM_FORCEFIELD_DIR.mkdir(parents=True, exist_ok=True)
+        target_dir = CUSTOM_FORCEFIELD_DIR / f"{ff_pdb2gmx_name}.ff"
+        if target_dir.exists():
+            raise ValueError(f"Target custom force field directory already exists: {target_dir}")
+
+        shutil.copytree(src_dir, target_dir)
+        ff_info = ForceFieldInfo(
+            name=custom_id,
+            family=family_normalized,
+            pdb2gmx_name=ff_pdb2gmx_name,
+            water_model=water_model,
+            solvate_cs=solvate_cs,
+            gbsa_mapping=gbsa_mapping,
+            description=description,
+            source="custom",
+            ff_dir=str(target_dir),
+        )
+
+        self._force_fields[ff_info.name.lower()] = ff_info
+        self._pdb2gmx_index[ff_info.pdb2gmx_name.lower()] = ff_info.name.lower()
+        self._custom_force_fields[ff_info.name.lower()] = ff_info
+        self._save_custom_force_fields()
+        return ff_info
+
+    def remove_custom_force_field(self, name: str) -> ForceFieldInfo:
+        """Remove a user-registered force field.
+
+        Only custom aN ids are removable. Built-in force fields are read-only.
+        """
+        ff = self.get_force_field(name)
+        if not ff:
+            raise ValueError(f"Unknown force field: {name}")
+        if ff.source != "custom":
+            raise ValueError(f"Built-in force field cannot be removed: {ff.name}")
+
+        ff_path = self.get_force_field_path(ff.name)
+        key = ff.name.lower()
+        self._force_fields.pop(key, None)
+        self._custom_force_fields.pop(key, None)
+        self._pdb2gmx_index.pop(ff.pdb2gmx_name.lower(), None)
+
+        if ff_path and ff_path.exists():
+            shutil.rmtree(ff_path)
+
+        self._save_custom_force_fields()
+        return ff
     
     def get_pdb2gmx_name(self, name: str) -> Optional[str]:
         """Get pdb2gmx name for a force field.
@@ -312,6 +530,13 @@ class ForceFieldRegistry:
         ff = self.get_force_field(name)
         if not ff:
             return None
+
+        # Custom force field path from explicit metadata
+        if ff.ff_dir:
+            ff_dir = Path(ff.ff_dir)
+            if not ff_dir.is_absolute():
+                ff_dir = Path(__file__).parent / ff_dir
+            return ff_dir if ff_dir.exists() else None
 
         # Force field folder name matches pdb2gmx_name (e.g., "amber99sb-ildn" -> "amber99sb-ildn.ff")
         ff_folder_name = f"{ff.pdb2gmx_name}.ff"
@@ -420,6 +645,11 @@ def list_charmm_force_fields() -> List[str]:
     return REGISTRY.list_by_family("CHARMM")
 
 
+def list_custom_force_fields() -> List[str]:
+    """List user-registered custom force fields (aN ids)."""
+    return REGISTRY.list_custom_force_fields()
+
+
 def get_force_field(name: str) -> Optional[ForceFieldInfo]:
     """Get force field information by name.
     
@@ -470,6 +700,32 @@ def validate_force_field(name: str) -> tuple[bool, str]:
         Tuple of (is_valid, message)
     """
     return REGISTRY.validate(name)
+
+
+def register_custom_force_field(
+    ff_dir: str,
+    pdb2gmx_name: Optional[str] = None,
+    family: str = "AMBER",
+    water_model: str = "tip3p",
+    solvate_cs: str = "spc216",
+    gbsa_mapping: Optional[str] = None,
+    description: str = "",
+) -> ForceFieldInfo:
+    """Register a custom force field in global registry."""
+    return REGISTRY.register_custom_force_field(
+        ff_dir=ff_dir,
+        pdb2gmx_name=pdb2gmx_name,
+        family=family,
+        water_model=water_model,
+        solvate_cs=solvate_cs,
+        gbsa_mapping=gbsa_mapping,
+        description=description,
+    )
+
+
+def remove_custom_force_field(name: str) -> ForceFieldInfo:
+    """Remove a custom force field from global registry."""
+    return REGISTRY.remove_custom_force_field(name)
 
 
 if __name__ == "__main__":

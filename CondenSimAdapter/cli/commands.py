@@ -30,6 +30,7 @@ from .commands_refactored import (
     info_command,
     droplet_density_command,
     to_run_command,
+    forcefield_command,
 )
 
 __all__ = [
@@ -52,4 +53,5 @@ __all__ = [
     'info_command',
     'droplet_density_command',
     'to_run_command',
+    'forcefield_command',
 ]

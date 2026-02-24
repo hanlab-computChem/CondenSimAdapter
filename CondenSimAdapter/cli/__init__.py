@@ -76,7 +76,7 @@ if _stderr_fileno is not None and not os.environ.get('FORCE_ADAPTER_STDERR', '')
 
 import click
 
-from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command, to_run_command
+from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command, to_run_command, forcefield_command
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
@@ -96,6 +96,7 @@ def main():
         init             Initialize a new configuration template
         droplet-density  Estimate protein density in droplet geometry
         info             Display system and environment information
+        forcefield       Manage custom all-atom force fields
 
     \b
     Available CG force fields:
@@ -130,6 +131,7 @@ main.add_command(cg_command, 'cg')
 main.add_command(backmap_command, 'backmap')
 main.add_command(minimize_command, 'minimize')
 main.add_command(to_run_command, 'to_run')
+main.add_command(forcefield_command, 'forcefield')
 
 # Utility commands
 main.add_command(init_command, 'init')

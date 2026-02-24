@@ -9,7 +9,7 @@ import sys
 
 import click
 
-from ..shared import CG_FORCE_FIELDS, MINIMIZE_FORCE_FIELDS
+from ..shared import CG_FORCE_FIELDS, get_minimize_force_fields
 
 
 @click.command('info', context_settings={'help_option_names': ['-h', '--help']})
@@ -31,7 +31,7 @@ def info_command():
     
     # Available all-atom force fields
     click.echo(f"\n  Available all-atom force fields:")
-    aa_ffs = MINIMIZE_FORCE_FIELDS
+    aa_ffs = get_minimize_force_fields()
     # Display in two columns
     for i in range(0, len(aa_ffs), 2):
         left = f"    {aa_ffs[i]}"
