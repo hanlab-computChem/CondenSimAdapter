@@ -1,300 +1,106 @@
 #!/usr/bin/env python3
-"""
-Minimize Command
-
-Energy minimization using AMBER/CHARMM force fields.
-"""
+"""Minimize command: AA softcore energy minimization."""
 
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 import click
 from click_option_group import optgroup
 
-
-def _print_help(ctx, param, value):
-    if not value or ctx.resilient_parsing:
-        return
-    click.echo(ctx.get_help())
-    ctx.exit()
+from ..shared import get_minimize_force_fields, validate_minimize_force_field
 
 
-@click.command('minimize', context_settings={'help_option_names': []})
-@optgroup.group('CORE INPUTS')
-@optgroup.option(
-    '--input-file', '-f',
-    type=click.Path(exists=True),
-    required=True,
-    help='Configuration YAML (same as CG stage, same flag as adapter cg)',
-)
-@optgroup.option(
-    '--input', '-i',
-    type=click.Path(),
-    required=False,
-    default=None,
-    help='Input: backmap output directory (adapter backmap) or PDB file (user provided). '
-         'Default: {system_name}_backmap',
-)
-@optgroup.group('Simulation settings')
-@optgroup.option(
-    '--force-field', '-ff',
-    type=str,
-    default='1-a99SBdisp',
-    callback=None,  # Will be set in function
-    help='Force field for minimization. Use built-in number (1-9), full name, or custom id (aN).\n'
-         '  1-a99SBdisp (recommended)\n'
-         '  2-amber03wsc (recommended)\n'
-         '  3-amber99sbws-stqp (recommended)\n'
-         '  4-amber99sbws-stq\n'
-         '  5-des-amber\n'
-         '  6-des-amber-sf1.0\n'
-         '  7-amber99sb-ildn\n'
-         '  8-amber14sb\n'
-         '  9-charmm36m\n'
-         '  a1/a2/... (custom force fields added via adapter forcefield add)\n'
-         'Default: 1 (a99SBdisp)',
-)
-@optgroup.option(
-    '-l', '--level',
-    type=click.Choice(['high', 'medium', 'low']),
-    default='medium',
-    help='Optimization level: high (7 steps), medium (5 steps), low (3 steps). Default: medium',
-)
-@optgroup.option(
-    '--tolerance',
-    type=float,
-    default=100.0,
-    help='Minimization tolerance in kJ/(mol·nm). Default: 100.0 (no need to set in normal runs)',
-)
-@optgroup.option(
-    '--iter',
-    type=int,
-    default=5000,
-    help='Maximum minimization iterations per step. Default: 5000 (no need to set in normal runs)',
-)
-@optgroup.option(
-    '--salt-conc',
-    type=float,
-    default=0.15,
-    help='Salt/ion concentration in M (for both implicit and explicit solvent). Default: 0.15',
-)
-@optgroup.option(
-    '--cutoff',
-    type=float,
-    default=2.0,
-    help='Nonbonded cutoff in nm. Default: 2.0',
-)
-@optgroup.group('Output settings')
-@optgroup.option(
-    '--output', '-o',
-    type=click.Path(),
-    help='Output directory (default: {system_name}_minimize)',
-)
-@optgroup.option(
-    '--solvate',
-    is_flag=True,
-    default=False,
-    help='Enable explicit solvation (adds water box and ions)',
-)
-@optgroup.group('RESOURCES')
-@optgroup.option(
-    '--device', '-d',
-    type=click.Choice(['cpu', 'cuda', 'opencl']),
-    default='cuda',
-    help='Device for OpenMM (default: cuda)',
-)
-@optgroup.option(
-    '--gpu-id', '-g',
-    type=int,
-    default=0,
-    help='GPU device index (only used when device is cuda or opencl, default: 0)',
-)
-@optgroup.group('TROUBLESHOOTING')
-@optgroup.option(
-    '--no-disulfide',
-    is_flag=True,
-    default=False,
-    help='Disable disulfide detection in pdb2gmx (-ss). Only use if normal runs '
-         'fail with atom-count mismatch errors; this may allow the build to complete.',
-)
-@optgroup.option(
-    '--his-type',
-    type=click.Choice(['0', '1']),
-    default=None,
-    help='Use pdb2gmx -his to set all histidines: 0=HID, 1=HIE. Only use if '
-         'normal runs fail with atom-count mismatch errors; this may allow the build to complete.',
-)
-@optgroup.group('DROPLET SETTINGS')
-@optgroup.option(
-    '--droplet-box-type', '-bt',
-    type=click.Choice(['dodecahedron', 'cubic', 'octahedron']),
-    default=None,
-    help='Box type for droplet simulation: dodecahedron, cubic, or octahedron.',
-)
-@optgroup.option(
-    '--droplet-distance', '-dd',
-    type=float,
-    default=None,
-    help='Distance between solute and box edge in nm. Required when --droplet-box-type is set.',
-)
-@optgroup.group('HELP')
-@optgroup.option(
-    '-h', '--help',
-    is_flag=True,
-    is_eager=True,
-    expose_value=False,
-    callback=_print_help,
-    help='Show this message and exit.',
-)
-def minimize_command(input, input_file, output, force_field, device, gpu_id, level, tolerance, iter, salt_conc, cutoff, solvate, no_disulfide, his_type, droplet_box_type, droplet_distance):
+@click.command('minimize', context_settings={'help_option_names': ['-h', '--help']})
+@click.option('--input', '-i', 'input_pdb', type=click.Path(exists=True), required=True,
+              help='Input all-atom PDB (output from adapter backmap).')
+@click.option('--input-file', '-f', type=click.Path(exists=True), default=None,
+              help='Simulation config YAML (for component definitions).')
+@click.option('--output', '-o', 'output_dir', type=click.Path(), default=None,
+              help='Output directory (default: <system_name>_minimize/).')
+@click.option('--force-field', '-ff', type=str, default='1-a99SBdisp',
+              callback=validate_minimize_force_field,
+              help='All-atom force field (e.g. 1-a99SBdisp, 7-amber99sb-ildn).')
+@click.option('--gpu-id', '-g', type=int, default=0, show_default=True,
+              help='GPU device ID.')
+@click.option('--platform', type=str, default='CUDA', show_default=True,
+              help='OpenMM platform: CUDA | OpenCL | CPU.')
+@click.option('--tolerance', type=float, default=100.0, show_default=True,
+              help='Energy tolerance kJ/(mol·nm).')
+@click.option('--solvate', is_flag=True, default=False,
+              help='Add explicit TIP3P solvent.')
+@click.option('--no-disulfide', is_flag=True, default=False,
+              help='Disable automatic disulfide bond detection.')
+@click.option('--verbose', '-v', is_flag=True, default=False)
+def minimize_command(
+    input_pdb: str,
+    input_file: Optional[str],
+    output_dir: Optional[str],
+    force_field: str,
+    gpu_id: int,
+    platform: str,
+    tolerance: float,
+    solvate: bool,
+    no_disulfide: bool,
+    verbose: bool,
+):
     """\b
-    Energy minimization using AMBER/CHARMM force fields.
-
-    \b
-    Workflow:
-        1. Implicit solvent optimization (OBC2 model) -> minimize_final.pdb
-        2. (Optional) If --solvate enabled:
-           - Add water box and ions to minimize_final.pdb
-           - Output: minimize_final_solvated.gro + topol.top
-        3. (Optional) If --droplet-box-type specified:
-           - Build solvent box using gmx editconf
-           - Output: minimize_final_box.gro
-
-    \b
-    Uses gromacs pdb2gmx for topology generation and multi-step OpenMM
-    minimization (Gaussian -> Softcore -> Standard) with OBC2 implicit solvent.
-
-    \b
-    Available force fields:
-        1. a99SBdisp:         a99SB-disp with custom water
-        2. amber03wsc:        AMBER03wsc with tip4p2005s
-        3. amber99sbws-stqp:  AMBER99SB-WS (STQp) with tip4p2005s
-        4. amber99sbws-stq:   AMBER99SB-WS (stq) with tip4p2005s
-        5. des-amber:         DES-AMBER with tip4pd
-        6. des-amber-sf1.0:   DES-AMBER SF1.0 with tip4pd
-        7. amber99sb-ildn:    AMBER99SB-ILDN with tip3p (default)
-        8. amber14sb:         AMBER14SB with tip3p
-        9. charmm36m:         CHARMM36-jul2021 with tip3p
-        aN. custom:           user-registered force field via `adapter forcefield add`
-
-    \b
-    Optimization levels:
-        high:   4 steps (lambda: 0.65 -> 0.75 -> 0.85 -> 0.95)
-        medium: 3 steps (lambda: 0.75 -> 0.85 -> 0.95) - default
-        low:    2 steps (lambda: 0.85 -> 0.95)
+    Run three-stage softcore OpenMM energy minimization.
 
     \b
     Examples:
-        adapter minimize -i TDP43_backmap -f config.yaml  # From backmap output
-        adapter minimize -i my_structure.pdb -f config.yaml  # From user PDB
-        adapter minimize -i TDP43_backmap -f config.yaml --force-field 9  # CHARMM36
-        adapter minimize -i TDP43_backmap -f config.yaml --force-field a1  # Custom force field
-        adapter minimize -i TDP43_backmap -f config.yaml --level low  # Fast mode
-        adapter minimize -i TDP43_backmap -f config.yaml -d cpu  # Use CPU
-        adapter minimize -i TDP43_backmap -f config.yaml --gpu-id 1  # GPU 1
-        adapter minimize -i TDP43_backmap -f config.yaml --solvate  # Explicit water
-        adapter minimize -i TDP43_backmap -f config.yaml --solvate --salt-conc 0.2
-        adapter minimize -i TDP43_backmap -f config.yaml -bt dodecahedron -dd 2.0  # Build droplet box
+        adapter minimize -i FUS_LC_backmap/backmapped.pdb -f FUS_LC.yaml
+        adapter minimize -i output.pdb -f config.yaml -ff 7-amber99sb-ildn
+        adapter minimize -i output.pdb -f config.yaml --solvate
     """
-    from ...src.minimize import MinimizeSimulator, MinimizeConfig
-    from ...src.pdb2gmx_utils import load_config_from_yaml
-    from ..shared import validate_minimize_force_field, REGISTRY
-
-    # Set the callback for force field validation
-    for param in minimize_command.params:
-        if param.name == 'force_field':
-            param.callback = validate_minimize_force_field
-            break
-
-    if input is None:
-        system_name, _ = load_config_from_yaml(input_file)
-        input = f"{system_name}_backmap"
-
-    if not Path(input).exists():
-        raise click.BadParameter(
-            f'Input path "{input}" does not exist. '
-            f'Provide --input or ensure the default "{input}" exists.'
-        )
-
-    click.echo(f"\n{'=' * 60}")
-    click.echo(f"Energy Minimization (AMBER/CHARMM)")
-    click.echo(f"{'=' * 60}")
-
-    click.echo(f"\n  Input: {input}")
-    click.echo(f"  Config: {input_file}")
-    if output:
-        click.echo(f"  Output: {output}")
-    click.echo(f"  Force field: {force_field}")
-    ff_info = REGISTRY.get_force_field(force_field)
-    if ff_info:
-        click.echo(f"    Family: {ff_info.family}")
-        click.echo(f"    Water model: {ff_info.water_model}")
-        click.echo(f"    GBSA mapping: {ff_info.family}")  # Show family (AMBER/CHARMM) instead of technical mapping name
-    click.echo(f"  GB model: OBC2 (implicit solvent)")
-    click.echo(f"  Device: {device.upper()}" + (f" (GPU {gpu_id})" if device.upper() != 'CPU' else ""))
-    click.echo(f"  Optimization level: {level}")
-    click.echo(f"  Tolerance: {tolerance}")
-    click.echo(f"  Iterations: {iter}")
-    click.echo(f"  Salt conc: {salt_conc} M")
-    click.echo(f"  Cutoff: {cutoff} nm")
-    if solvate:
-        click.echo(f"  Solvate: Enabled")
-    if no_disulfide:
-        click.echo(f"  Disulfide detection: Disabled (pdb2gmx -ss)")
-    if his_type is not None:
-        his_type_int = int(his_type)
-        click.echo(f"  Histidine type: {'HID' if his_type_int == 0 else 'HIE'} (pdb2gmx -his)")
-    if droplet_box_type is not None:
-        click.echo(f"  Droplet box: Enabled")
-        click.echo(f"    Box type: {droplet_box_type}")
-        if droplet_distance is not None:
-            click.echo(f"    Distance: {droplet_distance} nm")
-        else:
-            click.echo(f"    Distance: 2.0 nm (default)")
-
-    # Create minimize_config (GB model fixed to OBC2)
-    minimize_config = MinimizeConfig(
-        forcefield_type=force_field,
-        gb_model='OBC2',  # Fixed to OBC2
-        platform=device.upper(),
-        gpu_id=gpu_id,
-        tolerance=tolerance,
-        max_iterations=iter,
-        salt_conc=salt_conc,
-        nonbonded_cutoff=cutoff,
-        solvate_enabled=solvate,
-        ion_concentration=salt_conc,
-        disable_disulfide=no_disulfide,
-        his_type=int(his_type) if his_type is not None else None,
-        droplet_box_type=droplet_box_type,
-        droplet_distance=droplet_distance if droplet_distance is not None else 2.0
-    )
-    minimize_config.set_optimization_mode(level)
-
-    # Create simulator with components from YAML
-    simulator = MinimizeSimulator.from_yaml(input_file, minimize_config=minimize_config)
-
-    # Run minimization
     try:
-        result = simulator.run(input_pdb=input, output_dir=output)
-
-        if result.success:
-            click.echo(f"\n  Minimization completed")
-            click.echo(f"  Input PDB: {result.input_pdb}")
-            click.echo(f"  Output PDB: {result.output_pdb}")
-            if result.step_info:
-                click.echo(f"  Optimization: {result.step_info}")
-            click.echo(f"\n  Success!")
-        else:
-            click.echo(f"  Minimization failed:")
-            for error in result.errors:
-                click.echo(f"    - {error}")
-            sys.exit(1)
-
-    except Exception as e:
-        click.echo(f"  Error: {e}")
-        import traceback
-        traceback.print_exc()
+        from ...minimize.minimizer import MinimizeSimulator, MinimizeConfig
+        from ...minimize.config_loader import load_config_from_yaml, get_system_name
+        from ...core.config import Component
+    except ImportError as e:
+        click.echo(f"Import error: {e}", err=True)
         sys.exit(1)
 
-    click.echo()
+    click.echo(f"\n{'=' * 60}\nEnergy Minimization\n{'=' * 60}")
+    click.echo(f"  Input PDB:   {input_pdb}")
+    click.echo(f"  Force field: {force_field}")
+    click.echo(f"  Platform:    {platform} (GPU {gpu_id})")
+
+    # Load components from YAML
+    system_name = Path(input_pdb).stem
+    components = []
+    if input_file:
+        try:
+            system_name, raw_comps = load_config_from_yaml(input_file)
+            components = [Component.from_dict(c) for c in raw_comps]
+            click.echo(f"  System:      {system_name} ({len(components)} component types)")
+        except Exception as e:
+            click.echo(f"  Warning: could not load config: {e}")
+
+    out = output_dir or f"{system_name}_minimize"
+
+    cfg = MinimizeConfig(
+        forcefield_type=force_field,
+        platform=platform,
+        gpu_id=gpu_id,
+        tolerance=tolerance,
+        solvate=solvate,
+        disable_disulfide=no_disulfide,
+    )
+
+    sim = MinimizeSimulator(cfg, components, system_name)
+    try:
+        result = sim.run(input_pdb, output_dir=out)
+    except Exception as e:
+        click.echo(f"\nMinimization error: {e}", err=True)
+        if verbose:
+            import traceback; traceback.print_exc()
+        sys.exit(1)
+
+    if result.success:
+        click.echo(f"\n  Completed. Output PDB: {result.output_pdb}")
+    else:
+        click.echo(f"\n  Minimization failed.", err=True)
+        for err in result.errors:
+            click.echo(f"    {err}", err=True)
+        sys.exit(1)

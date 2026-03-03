@@ -15,7 +15,7 @@ import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.lib.distances import capped_distance
 
-from .cg import CGComponent, ComponentType
+from ..core.config import Component as CGComponent, ComponentType
 
 
 # =============================================================================

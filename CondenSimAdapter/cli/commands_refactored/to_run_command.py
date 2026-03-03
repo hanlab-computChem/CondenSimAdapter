@@ -352,7 +352,7 @@ def to_run_command(
         adapter to_run -f config.yaml -e amber           # Generate AMBER files
         adapter to_run -f config.yaml -i custom_minimize # Custom input dir
     """
-    from ...src.pdb2gmx_utils import load_config_from_yaml
+    from ...minimize.config_loader import load_config_from_yaml
 
     # Get system_name from YAML
     system_name, _ = load_config_from_yaml(input_file)

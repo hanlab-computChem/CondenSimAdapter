@@ -11,7 +11,7 @@ from pathlib import Path
 
 import click
 
-from ...src import CGSimulationConfig
+from ...core.config import CGConfig as CGSimulationConfig
 
 
 @click.command('droplet-density', context_settings={'help_option_names': ['-h', '--help']})

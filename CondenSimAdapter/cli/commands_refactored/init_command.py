@@ -208,7 +208,8 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
             component_note = "Mixed IDP + MDP"
     
     # Create config (without platform in simulation params)
-    from ...src import CGSimulationConfig, CGComponent, SimulationParams, TopologyType
+    from ...core.config import CGConfig as CGSimulationConfig, Component as CGComponent, TopologyType
+    SimulationParams = None  # not used in init path
     config = CGSimulationConfig(
         system_name=name,
         box=box_values,

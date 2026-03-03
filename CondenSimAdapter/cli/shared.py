@@ -32,21 +32,28 @@ from typing import Optional, List
 
 import click
 
-from ..src import CGSimulationConfig, CGComponent, ComponentType, TopologyType
-from ..src.minimize import MinimizeSimulator, MinimizeConfig
+from ..core.config import CGConfig as CGSimulationConfig, Component as CGComponent, ComponentType, TopologyType
+from ..minimize.minimizer import MinimizeSimulator, MinimizeConfig
 from ..forcefield.registry import REGISTRY, list_force_fields, BUILTIN_FORCE_FIELDS
 
 
-# Available force fields (for CG simulation)
-CG_FORCE_FIELDS = ['calvados', 'hps_urry', 'cocomo', 'mpipi_recharged']
+# Available CG force fields (CLI names -> internal core names)
+CG_FORCE_FIELDS = ['calvados2', 'calvados3', 'hps', 'cocomo', 'mpipi']
 
-# Mapping from CLI force field names to internal runner method names
-FORCE_FIELD_TO_RUNNER = {
-    'calvados': 'calvados',
-    'hps_urry': 'hps',  # CLI uses hps_urry, but method is run_hps
-    'cocomo': 'cocomo',
-    'mpipi_recharged': 'mpipi_recharged',
+# Legacy aliases accepted on the CLI for backwards compatibility
+CG_FF_ALIASES = {
+    'calvados'      : 'calvados2',
+    'hps_urry'      : 'hps',
+    'mpipi_recharged': 'mpipi',
 }
+
+def normalize_cg_ff(name: str) -> str:
+    """Resolve legacy / alternate CG force field names to canonical core names."""
+    return CG_FF_ALIASES.get(name.lower(), name.lower())
+
+# Keep FORCE_FIELD_TO_RUNNER for any code that still references it
+FORCE_FIELD_TO_RUNNER = {ff: ff for ff in CG_FORCE_FIELDS}
+FORCE_FIELD_TO_RUNNER.update(CG_FF_ALIASES)
 
 # Geometry defaults for init command
 GEOMETRY_DEFAULTS = {
