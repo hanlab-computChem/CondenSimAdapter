@@ -24,13 +24,14 @@ adapter --version
 pip install CondenSimAdapter
 ```
 
-This installs **everything** including:
+This installs everything including:
+
 - Core simulation tools (OpenMM, MDAnalysis, mdtraj)
 - Neural network backmapping (PyTorch, DGL, e3nn)
 
-**Requirements:** CUDA-capable GPU with CUDA >= 12.1
+Requirements: CUDA-capable GPU with CUDA >= 12.1
 
-## Development Installation
+### Development Installation
 
 If you want to modify the source code:
 
@@ -82,9 +83,9 @@ backmap.convert("cg_input.pdb", "aa_output.pdb")
 
 ## Links
 
-- **PyPI**: https://pypi.org/project/CondenSimAdapter/
-- **Documentation**: https://github.com/hanlab-computChem/CondenSimAdapter#readme
-- **Issues**: https://github.com/hanlab-computChem/CondenSimAdapter/issues
+- PyPI: https://pypi.org/project/CondenSimAdapter/
+- Documentation: https://github.com/hanlab-computChem/CondenSimAdapter#readme
+- Issues: https://github.com/hanlab-computChem/CondenSimAdapter/issues
 
 ## License
 
