@@ -1,0 +1,108 @@
+{% set name = "conden-sim-adapter" %}
+{% set version = "0.2.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  # Use local path for development, change to URL for release
+  # url: https://github.com/hanlab-computChem/CondenSimAdapter/archive/refs/tags/v{{ version }}.tar.gz
+  # sha256: REPLACE_WITH_SHA256
+  path: ../  # For local build
+
+build:
+  number: 0
+  script: {{ PYTHON }} -m pip install . --no-deps --no-build-isolation -vv
+  noarch: python
+  entry_points:
+    - adapter = CondenSimAdapter.cli:main
+
+requirements:
+  host:
+    - python >=3.10,<3.12
+    - pip
+    - setuptools >=68
+  
+  run:
+    # Python version
+    - python >=3.10,<3.12
+    
+    # ========== Core dependencies ==========
+    - click >=8.0
+    - click-option-group >=0.5
+    - pyyaml >=6.0
+    - numpy >=1.26,<2.0
+    - tqdm >=4.0
+    - pydantic >=2.0
+    
+    # ========== CG Simulation stack ==========
+    - openmm >=8.2
+    - mdtraj >=1.10
+    - mdanalysis >=2.6,<3.0
+    - biopython >=1.81
+    - parmed
+    - gromacswrapper
+    - scipy >=1.10
+    - matplotlib >=3.5
+    - networkx >=2.8
+    - numba >=0.60
+    - jinja2
+    - statsmodels
+    
+    # ========== Neural network backmapping ==========
+    - pytorch >=2.1,<2.2
+    - pytorch-cuda =12.1  # GPU support by default
+    - dgl >=2.1
+    - e3nn >=0.5
+    - torchdata >=0.7
+    - ml-collections >=0.1
+    
+    # ========== External tools ==========
+    - gromacs >=2023  # System dependency, but conda can provide
+
+# Include model files (189MB) directly in the package
+test:
+  imports:
+    - CondenSimAdapter
+    - CondenSimAdapter.core
+    - openmm
+    - torch
+    - dgl
+  commands:
+    - adapter --help
+    - adapter --version
+    - python -c "from CondenSimAdapter.backmap.cg2all.model import MODEL_PATHS; print('Models available:', list(MODEL_PATHS.keys()))"
+  requires:
+    - pytest
+  source_files:
+    - tests/
+
+about:
+  home: https://github.com/hanlab-computChem/CondenSimAdapter
+  summary: 'Automated CG-to-AA workflow for protein condensate simulations'
+  description: |
+    CondenSimAdapter is an automated workflow for protein condensate simulations,
+    covering the main stages from coarse-grained (CG) to all-atom (AA).
+    
+    **One-line installation:**
+    `conda install -c conda-forge conden-sim-adapter`
+    
+    **Key Features:**
+    - CG simulation: CALVADOS2/3, HPS-Urry, COCOMO2, Mpipi-Recharged
+    - Neural network CG-to-AA backmapping (cg2all)
+    - All-atom minimization with softcore potentials
+    - Support for slab, droplet, and bulk geometries
+    
+    **Installed tools:**
+    - `adapter` - Main CLI
+    - GROMACS - For AA simulations
+    - OpenMM, PyTorch, DGL - Pre-configured with CUDA 12.1
+  license: GPL-3.0
+  license_file: LICENSE
+  doc_url: https://github.com/hanlab-computChem/CondenSimAdapter#readme
+  dev_url: https://github.com/hanlab-computChem/CondenSimAdapter
+
+extra:
+  recipe-maintainers:
+    - tianxj15

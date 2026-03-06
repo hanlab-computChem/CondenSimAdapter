@@ -1,0 +1,91 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      
+      - name: Build package
+        run: python -m build
+      
+      - name: Check package size
+        run: |
+          ls -lh dist/
+          WHEEL_SIZE=$(stat -c%s dist/*.whl)
+          SDIST_SIZE=$(stat -c%s dist/*.tar.gz)
+          echo "Wheel size: $WHEEL_SIZE bytes ($((WHEEL_SIZE / 1024 / 1024)) MB)"
+          echo "Sdist size: $SDIST_SIZE bytes ($((SDIST_SIZE / 1024 / 1024)) MB)"
+          
+          # Check if over 100MB (PyPI default limit)
+          if [ $WHEEL_SIZE -gt 104857600 ]; then
+            echo "⚠️  WARNING: Wheel size exceeds 100MB PyPI limit"
+            echo "Please request size limit increase at: https://github.com/pypi/support/issues"
+          fi
+      
+      - name: Check package with twine
+        run: twine check dist/*
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  test-install:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Test installation
+        run: |
+          pip install dist/*.whl
+          adapter --version
+          adapter --help
+          python -c "from CondenSimAdapter.backmap.cg2all.model import MODEL_PATHS; print('Models included:', list(MODEL_PATHS.keys()))"
+
+  publish:
+    needs: [build, test-install]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/CondenSimAdapter
+    permissions:
+      id-token: write  # For trusted publishing
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # If size > 100MB, this will fail until you request limit increase
