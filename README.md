@@ -42,15 +42,6 @@ This includes PyTorch, DGL, and e3nn for CG-to-AA backmapping.
 pip install "CondenSimAdapter[all]"
 ```
 
-### Optional: COCOMO Multidomain Protein Support
-
-```bash
-pip install git+https://github.com/feiglab/mdsim.git
-pip install numpy==1.26.4 mdtraj==1.11.0
-```
-
-Note: `mdsim` claims it needs higher dependency versions, but downgrading `numpy` and `mdtraj` to the versions above does not affect COCOMO simulations.
-
 ## Development Installation
 
 If you want to modify the source code:
