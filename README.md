@@ -20,27 +20,18 @@ adapter --version
 
 ### Installation Options
 
-#### Core Package Only
+#### Standard Installation (recommended)
 ```bash
 pip install CondenSimAdapter
 ```
+Includes all core functionality: OpenMM, MDAnalysis, mdtraj, and other simulation tools.
 
-#### With Simulation Dependencies (recommended)
-```bash
-pip install "CondenSimAdapter[sim]"
-```
-This includes OpenMM, MDAnalysis, mdtraj, and other simulation tools.
-
-#### With Machine Learning Dependencies (for neural network backmapping)
+#### With Machine Learning (optional)
+For neural network backmapping (requires CUDA-matched PyTorch):
 ```bash
 pip install "CondenSimAdapter[ml]"
 ```
 This includes PyTorch, DGL, and e3nn for CG-to-AA backmapping.
-
-#### Full Installation (everything)
-```bash
-pip install "CondenSimAdapter[all]"
-```
 
 ## Development Installation
 

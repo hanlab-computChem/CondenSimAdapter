@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "CondenSimAdapter"
-version = "1.0.0b1"
+version = "1.0.0b2"
 description = "Automated CG-to-AA workflow for protein condensate simulations"
 authors = [{ name = "Xiaojing Tian", email = "tianxj15@tsinghua.org" }]
 license = { text = "GPL-3.0" }
@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 
-# Core dependencies - lightweight, always required
+# Core dependencies - includes all CG simulation functionality by default
 dependencies = [
     "click>=8.0",
     "click-option-group>=0.5",
@@ -31,11 +31,6 @@ dependencies = [
     "numpy>=1.26,<2.0",
     "tqdm>=4.0",
     "pydantic>=2.0",
-]
-
-[project.optional-dependencies]
-# CG simulation dependencies
-sim = [
     "openmm>=8.2",
     "mdtraj>=1.10",
     "MDAnalysis>=2.6,<3.0",
@@ -51,6 +46,7 @@ sim = [
     "PeptideConstructor",
 ]
 
+[project.optional-dependencies]
 # Neural network backmapping (optional, requires CUDA-matched PyTorch)
 ml = [
     "torch>=2.1,<2.2",
@@ -59,9 +55,6 @@ ml = [
     "torchdata>=0.7",
     "ml-collections>=0.1",
 ]
-
-# Everything
-all = ["CondenSimAdapter[sim,ml]"]
 
 # Development dependencies
 dev = [
