@@ -1,0 +1,58 @@
+;       User spoel (236)
+;       Wed Nov  3 17:12:44 1993
+;       Input file
+;     this version only works with cpu and gromacs 3.x and 4.x
+;     as shift potential for nonbonded cut-off smooth is no longer supported 
+;     in newer version of groamcs
+;
+title               =  Yo
+cpp                 =  /lib/cpp
+constraints         =  none
+integrator          =  md
+dt                  =  0.005
+nsteps              =  2000000000 ; total 10 us.
+nstcomm             =  1
+nstxout             =  25000
+nstvout             =  25000
+nstxtcout           =  5000
+;nstxtcout           =  51000
+xtc_grps            =  Protein
+nstfout             =  0
+nstlog              =  5000
+nstenergy           =  5000
+
+cutoff-scheme            = Verlet
+nstlist                  = 20
+ns_type                  = grid
+pbc                      = xyz
+verlet-buffer-tolerance  = 0.005
+
+coulombtype              = reaction-field
+rcoulomb                 = 1.1
+epsilon_r                = 15   ; 2.5 (with polarizable water)
+epsilon_rf               = 0
+vdw_type                 = cutoff
+vdw-modifier             = Potential-shift-verlet
+rvdw                     = 1.1
+
+
+
+table-extension     =  1.8
+; Berendsen temperature coupling is on in two groups
+Tcoupl              =  nose-hoover
+tc-grps             =  Protein  non-Protein
+tau_t               =  1.0   1.0
+;tau_t               =  0.4      0.4
+ref_t               =  330 330
+; Energy monitoring
+energygrps          =  Protein  non-Protein
+; Pressure coupling is on
+Pcoupl              =  Parrinello-Rahman
+tau_p               =  2.0
+;tau_p               =  0.5
+compressibility     =  4.5e-5
+ref_p               =  1.0
+; Generate velocites is on at 300 K.
+gen_vel             =  no
+gen_temp            =  330.0
+gen_seed            =  878594
