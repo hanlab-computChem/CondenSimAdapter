@@ -11,6 +11,7 @@ import dgl
 import torch
 
 from .libconfig import MODEL_HOME
+from .model_downloader import ensure_model_available
 from .libdata import (
     PredictionData,
     create_trajectory_from_batch,
@@ -80,16 +81,32 @@ def convert_cg2all(
     if ckpt_fn is None:
         # Only use FIX version for CalphaBasedModel when fix_atom=True
         if model_type in MODELS_WITH_FIX and fix_atom:
+            model_name = f"{model_type}-FIX"
             ckpt_fn = MODEL_HOME / f"{model_type}-FIX.ckpt"
         else:
+            model_name = model_type
             ckpt_fn = MODEL_HOME / f"{model_type}.ckpt"
+        
+        # Try to download if not exists
+        if not ckpt_fn.exists() or ckpt_fn.stat().st_size < 1024*1024:
+            try:
+                ckpt_fn = ensure_model_available(model_name, MODEL_HOME)
+            except Exception as e:
+                # Download failed, show helpful error
+                error_msg = f"Checkpoint file not found: {ckpt_fn}\n"
+                error_msg += f"\nDownload error: {e}\n"
+                error_msg += "\nTo use backmapping, you need to either:\n"
+                error_msg += "1. Install huggingface_hub: pip install huggingface_hub\n"
+                error_msg += f"2. Manually download models from: https://huggingface.co/hanlab/condensimadapter-cg2all-models\n"
+                error_msg += f"3. Place models in: {MODEL_HOME}\n"
+                raise FileNotFoundError(error_msg)
     
     # Check if checkpoint file exists
     if not ckpt_fn.exists():
         error_msg = f"Checkpoint file not found: {ckpt_fn}\n"
         
         # Show available models
-        error_msg += "\nAvailable models:\n"
+        error_msg += "\nAvailable local models:\n"
         for model in SUPPORTED_MODELS:
             normal_ckpt = MODEL_HOME / f"{model}.ckpt"
             fix_ckpt = MODEL_HOME / f"{model}-FIX.ckpt"
