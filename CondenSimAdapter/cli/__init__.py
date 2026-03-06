@@ -77,6 +77,7 @@ if _stderr_fileno is not None and not os.environ.get('FORCE_ADAPTER_STDERR', '')
 import click
 
 from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command, to_run_command, forcefield_command
+from .commands_refactored.models_command import models_command
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
@@ -137,6 +138,7 @@ main.add_command(forcefield_command, 'forcefield')
 main.add_command(init_command, 'init')
 main.add_command(droplet_density_command, 'droplet-density')
 main.add_command(info_command, 'info')
+main.add_command(models_command, 'models')
 
 # Hidden/experimental commands
 pace_opt_command.hidden = True
