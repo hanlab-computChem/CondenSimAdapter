@@ -18,20 +18,17 @@ pip install CondenSimAdapter
 adapter --version
 ```
 
-### Installation Options
+### Standard Installation
 
-#### Standard Installation (recommended)
 ```bash
 pip install CondenSimAdapter
 ```
-Includes all core functionality: OpenMM, MDAnalysis, mdtraj, and other simulation tools.
 
-#### With Machine Learning (optional)
-For neural network backmapping (requires CUDA-matched PyTorch):
-```bash
-pip install "CondenSimAdapter[ml]"
-```
-This includes PyTorch, DGL, and e3nn for CG-to-AA backmapping.
+This installs **everything** including:
+- Core simulation tools (OpenMM, MDAnalysis, mdtraj)
+- Neural network backmapping (PyTorch, DGL, e3nn)
+
+**Requirements:** CUDA-capable GPU with CUDA >= 12.1
 
 ## Development Installation
 
