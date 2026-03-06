@@ -25,8 +25,9 @@ except ImportError:
 
 from openmm import openmm as omm
 
-# Import softcore system builder from minimize package
+# Make both the minimize/ and src/ directories importable
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from softcore import (
     GromacsTopFileWithSoftcore,
     NONBONDED_GAUSSIAN,
@@ -120,17 +121,32 @@ def run_minimization(
         gro_position = conf.getPositions()
         box_vectors = conf.getPeriodicBoxVectors()
         
-        # Create topology
+        # Create topology.
+        # includeDir points to the parent of the minimize/ dir (i.e. the main
+        # output dir where the force field folder, e.g. a99SBdisp.ff, lives).
         top = GromacsTopFileWithSoftcore(
             'topol.top',
             periodicBoxVectors=box_vectors,
+            includeDir=str(output_path.parent),
             forcefield_type=ff_type.upper()
         )
         
-        # Setup platform
+        # Setup platform with CUDA→CPU fallback
         platform_name, properties = resolve_openmm_platform(device, gpu_id, precision="mixed")
-        platform = Platform.getPlatformByName(platform_name)
-        
+        try:
+            platform = Platform.getPlatformByName(platform_name)
+            # Probe that the platform is actually usable by creating a tiny context
+            if platform_name not in ("CPU", "Reference"):
+                _test_sys = mm.System()
+                _test_sys.addParticle(1.0)
+                _test_integ = mm.VerletIntegrator(0.001)
+                _test_ctx = mm.Context(_test_sys, _test_integ, platform)
+                del _test_ctx, _test_integ, _test_sys
+        except Exception as e:
+            print(f"  [warn] {platform_name} unavailable ({e}), falling back to CPU", flush=True)
+            platform_name, properties = "CPU", {}
+            platform = Platform.getPlatformByName("CPU")
+
         # Store current positions
         current_positions = gro_position
         
@@ -253,8 +269,8 @@ def run_minimization(
         state_final = simulation.context.getState(getEnergy=True, getPositions=True, enforcePeriodicBox=True)
 
         # Save final output
-        PDBFile.writeFile(top.topology, state_final.getPositions(), open('minimize_final.pdb', 'w'))
-        print(f"  Generated minimize_final.pdb")
+        PDBFile.writeFile(top.topology, state_final.getPositions(), open('final.pdb', 'w'))
+        print(f"  Generated final.pdb")
 
         # Clean up
         del system_final, simulation, state_final

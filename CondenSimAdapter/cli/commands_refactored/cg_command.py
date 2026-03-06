@@ -67,7 +67,7 @@ def cg_command(
 
     click.echo(f"  System:      {config.system_name}")
     click.echo(f"  Force field: {config.force_field}")
-    click.echo(f"  GPU ID:      {gpu_id}")
+    click.echo(f"  Requested:   {config.simulation.platform} (GPU {gpu_id})")
 
     # Determine output directory
     out = output_dir or f"{config.system_name}_CG"

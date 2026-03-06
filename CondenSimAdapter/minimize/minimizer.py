@@ -81,6 +81,7 @@ class MinimizeResult:
     output_pdb: str = ""
     input_pdb: str = ""
     output_dir: str = ""
+    solvated_top: str = ""
     errors: List[str] = field(default_factory=list)
     intermediate_files: dict = field(default_factory=dict)
 
@@ -145,22 +146,22 @@ class MinimizeSimulator:
         result = MinimizeResult(success=False, input_pdb=input_pdb, output_dir=str(out))
 
         try:
-            # 1. Copy AA force field for GROMACS
+            import click
+
+            # Step 1 — topology
+            click.echo(f"\n  [1/4] Building GROMACS topology ({self._ff_name}) ...")
             ff_path = self._get_ff_path()
             if ff_path and Path(ff_path).exists():
                 target_ff = out / Path(ff_path).name
                 if not target_ff.exists():
                     shutil.copytree(ff_path, target_ff)
-                log.info(f"Using force field: {Path(ff_path).name}")
             else:
                 log.warning(f"Force field folder not found for '{self.config.forcefield_type}'")
 
-            # 2. Generate per-component topology
             from .topology_builder import generate_all_atom_topology, merge_topologies
             total_nmol = sum(getattr(c, "nmol", 1) for c in self.components)
             his_repeat = max(total_nmol * 30, 30)
 
-            log.info("Generating per-component topologies ...")
             comp_tops, water_model = generate_all_atom_topology(
                 self.components,
                 self._ff_name,
@@ -169,15 +170,13 @@ class MinimizeSimulator:
                 his_type=self.config.his_type,
                 his_repeat_count=his_repeat,
             )
-
             merged_top = merge_topologies(
                 comp_tops, topology_dir, self._ff_name, water_model, self.system_name
             )
-            log.info(f"Merged topology: {merged_top.name}")
 
-            # 3. Generate structure GRO from PDB
+            # Step 2 — structure GRO
+            click.echo(f"  [2/4] Processing input structure ...")
             from .topology_builder import run_pdb2gmx_for_structure
-            log.info("Generating structure GRO ...")
             structure_gro = run_pdb2gmx_for_structure(
                 Path(input_pdb), structure_dir, self._ff_name,
                 water_model="none",
@@ -186,46 +185,65 @@ class MinimizeSimulator:
                 his_repeat_count=his_repeat,
             )
 
-            # 4. Optional: resize box
             if self.config.box_resize and self.config.box_resize_dims:
                 structure_gro = self._resize_box(
                     structure_gro, structure_dir, self.config.box_resize_dims
                 )
 
-            # 5. Optional: solvate
-            topology_top = merged_top
-            if self.config.solvate:
-                structure_gro, topology_top = self.solvate_system(
-                    str(structure_gro), str(merged_top),
-                    out / "solvate", self.config.ion_concentration,
-                )
-
-            # 6. OpenMM three-stage minimization
-            log.info("Running OpenMM softcore minimization ...")
+            # Step 3 — OpenMM softcore minimization (implicit solvent)
+            click.echo(f"  [3/4] OpenMM softcore minimization (3 stages) ...")
             min_result = self._run_openmm_minimization(
-                str(structure_gro), str(topology_top), minimize_dir
+                str(structure_gro), str(merged_top), minimize_dir
             )
 
             final_pdb = min_result.get("final_pdb", "")
             result.success     = bool(final_pdb and Path(final_pdb).exists())
-            result.output_pdb  = final_pdb
             result.intermediate_files = min_result
 
             if result.success:
-                log.info(f"Minimization complete: {final_pdb}")
+                # Promote key output files to the root output dir (like old minimize.py)
+                root_pdb = out / "minimize_final.pdb"
+                root_top = out / "topol.top"
+                shutil.copy2(final_pdb, root_pdb)
+                shutil.copy2(merged_top, root_top)
+                final_pdb = str(root_pdb)
+                result.output_pdb = final_pdb
+                click.echo(f"  Minimization done  →  {root_pdb.name}")
 
-                # 7. Optional: build droplet box
+                # Step 4 — optional droplet box / solvation
                 if self.config.droplet_box_type:
-                    final_pdb = self._build_droplet_box(
+                    click.echo(f"  [4/4] Building droplet box ({self.config.droplet_box_type}) ...")
+                    droplet_gro = self._build_droplet_box(
                         final_pdb, out / "droplet",
                         self.config.droplet_box_type,
                         self.config.droplet_distance,
                     )
+                    # Promote to root dir
+                    root_box = out / "minimize_final_box.gro"
+                    shutil.copy2(droplet_gro, root_box)
+                    final_pdb = str(root_box)
                     result.output_pdb = final_pdb
+                    click.echo(f"  Droplet box done  →  {root_box.name}")
+
+                if self.config.solvate:
+                    click.echo(f"  [4/4] Explicit solvation ({water_model}, {self.config.ion_concentration} M) ...")
+                    solvated_gro, solvated_top = self.solvate_system(
+                        final_pdb, str(root_top),
+                        out / "solvate", self.config.ion_concentration,
+                    )
+                    # Promote solvated outputs to root dir
+                    root_solvated_gro = out / "minimize_final_solvated.gro"
+                    root_solvated_top = out / "topol.top"
+                    shutil.copy2(solvated_gro, root_solvated_gro)
+                    shutil.copy2(solvated_top, root_solvated_top)
+                    result.output_pdb  = str(root_solvated_gro)
+                    result.solvated_top = str(root_solvated_top)
+                    click.echo(f"  Solvation done  →  {root_solvated_gro.name}")
 
         except Exception as exc:
-            log.exception("Minimization failed")
+            import traceback
             result.errors.append(str(exc))
+            result.errors.append(traceback.format_exc())
 
         return result
 
@@ -251,47 +269,78 @@ class MinimizeSimulator:
 
     def solvate_system(
         self,
-        structure_gro: str,
+        structure_pdb: str,
         topology_top: str,
         solvate_dir: Path,
         ion_concentration: float = 0.15,
     ):
-        """Add explicit solvent and ions (TIP3P)."""
+        """Add explicit solvent and ions to a minimized (or droplet-boxed) structure.
+
+        The input is always a PDB (final.pdb from OpenMM minimization or the
+        droplet-box GRO).  The box is already the right size from the CG run
+        (slab/cubic) or was rebuilt by _build_droplet_box (droplet).  We must
+        NOT call editconf with -d/-bt/-c here — that would create an enormous
+        new box for slab/multi-chain systems.
+        """
         solvate_dir.mkdir(parents=True, exist_ok=True)
 
-        # editconf -- add 1.2 nm box padding
-        box_gro = str(solvate_dir / "box.gro")
+        # Resolve -cs (solvent coordinate file) for this force field.
+        # a99SBdisp / DES-AMBER / amber03wsc → tip4p
+        # amber99sb-ildn / amber14sb / charmm36m → spc216
+        from ..forcefield.registry import get_force_field
+        ff_info = get_force_field(self.config.forcefield_type)
+        solvate_cs = ff_info.solvate_cs if ff_info else "spc216"
+        log.info(f"  Solvating with -cs {solvate_cs} ({self.config.forcefield_type})")
+
+        # Convert PDB → GRO (format only, no box modification).
+        system_gro = solvate_dir / "system.gro"
         subprocess.run(
-            ["gmx", "editconf", "-f", structure_gro, "-o", box_gro,
-             "-c", "-d", "1.2", "-bt", "cubic"],
+            ["gmx", "editconf", "-f", structure_pdb, "-o", str(system_gro)],
             check=True, capture_output=True, text=True,
         )
 
-        # solvate
+        # solvate with the force-field-specific solvent coordinate file
         solvated_gro = str(solvate_dir / "solvated.gro")
         subprocess.run(
-            ["gmx", "solvate", "-cp", box_gro, "-o", solvated_gro,
-             "-p", topology_top],
+            ["gmx", "solvate", "-cp", str(system_gro), "-o", solvated_gro,
+             "-cs", solvate_cs, "-p", topology_top],
             check=True, capture_output=True, text=True,
         )
 
-        # Add ions
+        # Copy topology and force field folder into solvate_dir so that
+        # gmx grompp can resolve relative #include paths (e.g. a99SBdisp.ff/...)
+        # when run with cwd=solvate_dir.  This mirrors the old minimize.py logic.
+        local_top = solvate_dir / "topol.top"
+        shutil.copy2(topology_top, local_top)
+        try:
+            from ..forcefield.registry import get_force_field_path
+            ff_path = get_force_field_path(self.config.forcefield_type)
+            if ff_path:
+                ff_dest = solvate_dir / Path(ff_path).name
+                if not ff_dest.exists():
+                    shutil.copytree(ff_path, ff_dest)
+        except Exception:
+            pass
+
+        # Add ions — run grompp in solvate_dir so relative FF #includes resolve
         em_mdp = solvate_dir / "ions.mdp"
         em_mdp.write_text("integrator = steep\nnsteps = 0\n")
         ions_tpr = str(solvate_dir / "ions.tpr")
         subprocess.run(
-            ["gmx", "grompp", "-f", str(em_mdp), "-c", solvated_gro,
-             "-p", topology_top, "-o", ions_tpr, "-maxwarn", "5"],
+            ["gmx", "grompp", "-f", "ions.mdp", "-c", solvated_gro,
+             "-p", str(local_top), "-o", ions_tpr, "-maxwarn", "5"],
             check=True, capture_output=True, text=True,
+            cwd=str(solvate_dir),
         )
         ionized_gro = str(solvate_dir / "ionized.gro")
         subprocess.run(
             ["gmx", "genion", "-s", ions_tpr, "-o", ionized_gro,
-             "-p", topology_top, "-pname", "NA", "-nname", "CL",
+             "-p", str(local_top), "-pname", "NA", "-nname", "CL",
              "-conc", str(ion_concentration), "-neutral"],
             input="SOL\n", check=True, capture_output=True, text=True,
+            cwd=str(solvate_dir),
         )
-        return Path(ionized_gro), Path(topology_top)
+        return Path(ionized_gro), Path(local_top)
 
     def _build_droplet_box(
         self,
@@ -323,20 +372,28 @@ class MinimizeSimulator:
         in a child process so it can be killed cleanly on error.
         """
         import sys
+        from ..forcefield.registry import get_force_field as _get_ff
+        ff_info = _get_ff(self.config.forcefield_type)
+        ff_type = ff_info.family.lower() if ff_info else "amber"
+        ff_name = ff_info.pdb2gmx_name if ff_info else self.config.forcefield_type
+        # Map platform CUDA/CPU/OpenCL → lowercase device name for worker.py
+        device = self.config.platform.lower()
+
         worker = Path(__file__).parent / "worker.py"
         cmd = [
             sys.executable, str(worker),
-            "--gro", structure_gro,
-            "--top", topology_top,
-            "--out", str(minimize_dir),
-            "--ff", self.config.forcefield_type,
-            "--gb", self.config.gb_model,
-            "--tol", str(self.config.tolerance),
-            "--max-iter", str(self.config.max_iterations),
+            "-i", structure_gro,
+            "-t", topology_top,
+            "-o", str(minimize_dir),
+            "-d", device,
+            "-g", str(self.config.gpu_id),
+            "--iter", str(self.config.max_iterations),
+            "--tolerance", str(self.config.tolerance),
+            "--ff-type", ff_type,
+            "--ff-name", ff_name,
+            "--gb-model", self.config.gb_model,
+            "--salt-conc", str(self.config.ion_concentration),
             "--cutoff", str(self.config.nonbonded_cutoff),
-            "--platform", self.config.platform,
-            "--gpu", str(self.config.gpu_id),
-            "--lambdas", ",".join(str(l) for l in self.config.softcore_lambdas),
         ]
         log.debug("minimize worker cmd: %s", " ".join(cmd))
         proc = subprocess.run(

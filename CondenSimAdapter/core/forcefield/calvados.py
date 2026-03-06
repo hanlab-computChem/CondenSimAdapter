@@ -2,12 +2,11 @@
 CALVADOS2 / CALVADOS3 force field.
 
 Physics:
-  - Harmonic CA-CA backbone bonds (k = 4000 kJ/mol/nm^2)
-  - Ashbaugh-Hatch (AH) short-range non-bonded (protein-only, simplified)
+  - Harmonic CA-CA backbone bonds (k = 8368 kJ/mol/nm^2)
+  - Ashbaugh-Hatch (AH) short-range non-bonded (with ID-based mixing)
   - Yukawa (Debye-Hückel) electrostatics
   - Go-like ENM for folded domains (MDP only)
 
-Reference: Dannerec et al. Nat. Commun. 2020 (CALVADOS2/3).
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ class CalvadosFF(CGForceField):
     EPS_LJ   = 0.8368    # kJ/mol  (0.2 kcal/mol)
     RC_LJ    = 2.0       # nm
     RC_YU    = 4.0       # nm
-    K_BOND   = 4000.0    # kJ/mol/nm^2  (gentler than HPS; CALVADOS uses 8368 but 4000 is common)
+    K_BOND   = 8368.0    # kJ/mol/nm^2  (CALVADOS standard; matches original implementation)
 
     def __init__(self, version: int = 2):
         if version not in (2, 3):
@@ -80,20 +79,25 @@ class CalvadosFF(CGForceField):
     ) -> List[mm.Force]:
         forces = []
 
-        # --- Ashbaugh-Hatch (protein-only; id=1 for all beads) ---
+        # --- Ashbaugh-Hatch (with ID parameter for molecule-type mixing) ---
+        # ID parameter: protein=1, lipid=0, crowder=-1
+        # Uses select(id1+id2, (id1*id2)*0.5*(l1+l2), fixed_lambda) for mixing
         eps = self.EPS_LJ
         rc  = self.RC_LJ
+        # fixed_lambda used for non-protein interactions (lipid/lipid, protein/lipid, etc.)
+        fixed_lambda = 0.5  # Default for cross-type interactions
         expr = (
             f"{eps}*select(step(r-2^(1/6)*s),"
             f"4*l*((s/r)^12-(s/r)^6-shift),"
             f"4*((s/r)^12-(s/r)^6-l*shift)+(1-l));"
-            f"l=0.5*(l1+l2);"
+            f"l=select(id1+id2,(id1*id2)*0.5*(l1+l2),{fixed_lambda});"
             f"shift=(s/{rc})^12-(s/{rc})^6;"
             f"s=0.5*(s1+s2)"
         )
         ah = mm.CustomNonbondedForce(expr)
         ah.addPerParticleParameter("s")
         ah.addPerParticleParameter("l")
+        ah.addPerParticleParameter("id")
         ah.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
         ah.setCutoffDistance(rc * unit.nanometer)
         ah.setForceGroup(0)
@@ -108,10 +112,11 @@ class CalvadosFF(CGForceField):
         yu.setForceGroup(1)
 
         # Add per-particle parameters
+        # ID parameter: protein=1 (for proper AH lambda mixing)
         for meta in chain_meta:
             for aa in meta["sequence"]:
                 p = self._params.get(aa, self._params.get("G", {}))
-                ah.addParticle([p["sigma"], p["lambda"]])
+                ah.addParticle([p["sigma"], p["lambda"], 1])  # id=1 for protein
                 yu.addParticle([p["q"]])
 
         # Exclude bonded 1-2 pairs

@@ -51,6 +51,7 @@ def build_mdp_chain(
 ) -> Tuple[np.ndarray, str]:
     """
     Extract CG (CA or residue-COM) coordinates from an all-atom or CA PDB.
+    Mirrors the behavior of CALVADOS build.geometry_from_pdb.
 
     Args:
         pdb_path: Path to PDB file.
@@ -62,8 +63,13 @@ def build_mdp_chain(
     """
     import MDAnalysis as mda
     from MDAnalysis.lib.util import convert_aa_code
+    from warnings import catch_warnings, simplefilter
 
-    u = mda.Universe(pdb_path)
+    # Suppress MDAnalysis warnings (matches original CALVADOS behavior)
+    with catch_warnings():
+        simplefilter("ignore")
+        u = mda.Universe(pdb_path)
+    
     residues = u.select_atoms("protein").residues
 
     coords = []
@@ -115,9 +121,12 @@ def place_chains_slab(
     slab_width: Optional[float] = None,
 ) -> np.ndarray:
     """
-    Place chains on a grid within a slab centred at z = Lz/2.
+    Place chains on a staggered 3D grid within a slab centred at z = Lz/2.
 
-    The slab width defaults to min(Lx, Ly) / 2 if not provided.
+    Matches CALVADOS legacy behavior:
+    - Uses staggered grid placement (alternate layers offset by half grid spacing)
+    - Slab width defaults to min(Lx, Ly) / 2 if not provided
+    - Grid is centered in z at box[2] / 2
     """
     if slab_width is None:
         slab_width = min(box[0], box[1]) / 2.0
@@ -131,47 +140,45 @@ def place_chains_slab(
 def place_chains_random(
     chain_coords: List[np.ndarray],
     box: List[float],
-    clash_cutoff: float = 0.8,
+    clash_cutoff: float = 0.7,
     max_tries: int = 10_000,
 ) -> np.ndarray:
     """
     Randomly place chains, rejecting positions that clash with existing beads.
 
     Used for droplet topology (no periodic boundary during placement).
+    Mirrors the algorithm in CALVADOS build.random_placement().
     """
     placed_positions: List[np.ndarray] = []
     all_coords: List[np.ndarray] = []
 
     for chain in chain_coords:
-        chain_size = np.ptp(chain, axis=0).max() if len(chain) > 1 else 0.0
-
-        for _ in range(max_tries):
-            # random translation within box, keeping chain away from walls
-            margin = chain_size / 2.0 + 0.5
-            lo = margin
-            hi = np.array(box) - margin
-            if np.any(hi <= lo):
-                hi = np.array(box) * 0.9
-                lo = np.array(box) * 0.1
-            trans = np.random.uniform(lo, hi)
+        for ntry in range(max_tries):
+            # random translation within full box (like draw_starting_vec)
+            trans = np.random.uniform(0, box, size=3)
             candidate = chain + trans
 
-            # clash check against already-placed beads
+            # check if outside box (like check_walls)
+            if np.min(candidate) < 0:
+                continue
+            if np.min(np.array(box) - candidate) < 0:
+                continue
+
+            # clash check against already-placed beads (like check_clash)
             if all_coords:
                 all_placed = np.vstack(all_coords)
                 diffs = candidate[:, None, :] - all_placed[None, :, :]
                 dists = np.sqrt((diffs ** 2).sum(axis=-1))
                 if dists.min() < clash_cutoff:
                     continue
+
             all_coords.append(candidate)
             placed_positions.append(candidate)
             break
         else:
-            # fallback: place without clash check
-            trans = np.random.uniform(0, box, size=3)
-            candidate = chain + trans
-            all_coords.append(candidate)
-            placed_positions.append(candidate)
+            raise ValueError(
+                f"Tried {max_tries}x to add molecule. Giving up."
+            )
 
     return np.vstack(placed_positions)
 
@@ -193,13 +200,16 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
     chain_meta: List[dict] = []
     offset = 0
 
+    # Determine if we should use COM mapping (CALVADOS3 only)
+    use_com = config.resolved_force_field == "calvados3"
+    
     for comp in config.components:
         seq = comp.get_sequence()
         for _mol_idx in range(comp.nmol):
             if comp.comp_type == ComponentType.MDP and comp.pdb_path:
-                coords, _ = build_mdp_chain(comp.pdb_path)
+                coords, _ = build_mdp_chain(comp.pdb_path, use_com=use_com)
             else:
-                coords = build_idp_chain(len(seq), method="spiral")
+                coords = build_idp_chain(len(seq), method="compact")
             all_chains.append(coords)
             chain_meta.append({
                 "name"          : comp.name,
@@ -208,12 +218,13 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
                 "sequence"      : seq,
                 "folded_domains": comp.folded_domains,
                 "comp_type"     : comp.comp_type,
+                "pdb_path"      : comp.pdb_path if comp.comp_type == ComponentType.MDP else None,
             })
             offset += len(seq)
 
     # Assemble positions according to topology
     if config.topology == TopologyType.SLAB:
-        positions = place_chains_slab(all_chains, config.box)
+        positions = place_chains_slab(all_chains, config.box, slab_width=config.slab_width)
     elif config.topology == TopologyType.DROPLET:
         r = config.droplet_radius or (min(config.box) * 0.4)
         droplet_box = [r * 2.0, r * 2.0, r * 2.0]
@@ -273,34 +284,96 @@ def _build_compact(n: int, d: float = 0.38) -> np.ndarray:
 
 def _build_xyzgrid(n: int, box: List[float]) -> np.ndarray:
     """
-    3-D grid of N points, scaled proportionally to the box dimensions.
-    Mirrors the algorithm in CALVADOS build.build_xyzgrid.
+    3-D staggered grid of N points, scaled proportionally to the box dimensions.
+    Mirrors the algorithm in CALVADOS build.build_xyzgrid with staggered offsets.
+    
+    The staggered pattern:
+    - Adjacent z-planes are offset by (dx/2, dy/2) in xy
+    - Adjacent points within xy-plane have alternating z-offset (dz/2)
     """
     n = int(np.ceil(n))
+    if n < 1:
+        n = 1
+
     box = np.array(box, dtype=float)
-    r = box / box.sum()
-    a = (n / r.prod()) ** (1.0 / 3.0)
-    nxyz = np.floor(a * r).astype(int)
-    # at least 1 in each dimension
-    nxyz = np.maximum(nxyz, 1)
-    # generate enough points
+    # Calculate grid dimensions proportionally to box dimensions
+    r = box / np.sum(box)
+    a = np.cbrt(n / np.prod(r))
+    n_float = a * r
+    nxyz = np.maximum(np.floor(n_float), 1).astype(int)
+    
+    # Adjust grid dimensions to fit all N points
+    while np.prod(nxyz) < n:
+        ndeviation = n_float / nxyz
+        devmax = np.argmax(ndeviation)
+        nxyz[devmax] += 1
+    while np.prod(nxyz) > n:
+        nmax = np.argmax(nxyz)
+        nxyz[nmax] -= 1
+        if np.prod(nxyz) < n:
+            nxyz[nmax] += 1
+            break
+
+    # Grid spacing
+    dx = box[0] / nxyz[0]
+    dy = box[1] / nxyz[1]
+    dz = box[2] / nxyz[2]
+
     pts = []
-    xshift = box[0] / (2.0 * nxyz[0])
-    yshift = box[1] / (2.0 * nxyz[1])
-    zshift = box[2] / (2.0 * nxyz[2])
-    for xi in range(nxyz[0]):
-        for yi in range(nxyz[1]):
-            for zi in range(nxyz[2]):
-                x = xi * box[0] / nxyz[0] + xshift
-                y = yi * box[1] / nxyz[1] + yshift
-                z = zi * box[2] / nxyz[2] + zshift
-                pts.append([x, y, z])
-    pts = np.array(pts)
-    if len(pts) < n:
-        # pad with random
-        extra = np.random.rand(n - len(pts), 3) * box
-        pts = np.vstack([pts, extra])
-    return pts[:n]
+    x, y, z = 0.0, 0.0, 0.0
+    ctx, cty, ctz = 0, 0, 0
+    zplane = 1  # Controls xy-offset for alternating z-planes
+    xyplane = 1  # Controls z-offset within xy-plane
+
+    for _ in np.arange(n):
+        # Staggered offset: alternate z-planes offset by (dx/2, dy/2)
+        if zplane > 0:
+            xshift = 0
+            yshift = 0
+        else:
+            xshift = dx / 2
+            yshift = dy / 2
+
+        # Staggered offset: alternating z-offset within xy-plane
+        if xyplane < 0:
+            zshift = dz / 2
+        else:
+            zshift = 0
+
+        pts.append([x + xshift, y + yshift, z + zshift])
+
+        # Move to next grid point in x
+        ctx += 1
+        x += dx
+
+        # Update xyplane based on position parity (alternating pattern)
+        if (ctx % 2 == cty % 2):
+            xyplane = 1
+        else:
+            xyplane = -1
+
+        # Move to next row in y
+        if ctx == nxyz[0]:
+            ctx = 0
+            x = 0.0
+
+            cty += 1
+            y += dy
+
+            # Move to next layer in z
+            if cty == nxyz[1]:
+                ctx = 0
+                cty = 0
+                x = 0.0
+                y = 0.0
+
+                ctz += 1
+                z += dz
+
+                # Flip zplane for staggered offset in next xy-layer
+                zplane = -zplane
+
+    return np.array(pts)
 
 
 def _assemble_chains(

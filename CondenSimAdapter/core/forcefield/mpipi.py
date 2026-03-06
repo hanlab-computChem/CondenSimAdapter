@@ -54,6 +54,11 @@ _MPIPI_MASS: Dict[str, float] = {
 _K_BOND = 8031.0   # kJ/mol/nm^2  (harmonic backbone)
 _D_IDR  = 0.381    # nm  (IDR bond length)
 
+# ENM parameters for folded domains
+_ENM_K       = 8031.0   # kJ/mol/nm^2
+_ENM_CUTOFF  = 0.75     # nm
+_ENM_MIN_SEP = 1        # MPIPI uses no sequence separation (neighbors included)
+
 
 class MpipiFF(CGForceField):
     """Mpipi-Recharged force field for protein condensates."""
@@ -139,6 +144,83 @@ class MpipiFF(CGForceField):
         yu.createExclusionsFromBonds(bonds, 1)
 
         return [wf, yu]
+
+    # ------------------------------------------------------------------
+
+    def build_harmonic_bonds(
+        self,
+        topology: app.Topology,
+        r0: float = _D_IDR,
+        k: float = _K_BOND,
+    ) -> mm.HarmonicBondForce:
+        """MPIPI CA-CA harmonic bonds using MPIPI-specific defaults (k=8031.0, r0=0.381)."""
+        return super().build_harmonic_bonds(topology, r0=r0, k=k)
+
+    # ------------------------------------------------------------------
+
+    def build_enm_bonds(
+        self,
+        positions: np.ndarray,
+        chain_meta: List[dict],
+        restraint_type: str = "harmonic",
+        k: float = None,
+        cutoff: float = None,
+    ) -> mm.Force:
+        """
+        Elastic Network Model (ENM) for folded domains.
+        
+        MPIPI-specific implementation using original MPIPI parameters:
+        - k = 8031 kJ/mol/nm^2
+        - cutoff = 0.75 nm
+        - min_seq_sep = 1 (no sequence separation, matching original behavior)
+        
+        Reference: Original MPIPI implementation uses KDTree without sequence separation.
+        """
+        from typing import Optional
+        
+        # Use MPIPI-specific defaults if not provided
+        if k is None:
+            k = _ENM_K
+        if cutoff is None:
+            cutoff = _ENM_CUTOFF
+        min_seq_sep = _ENM_MIN_SEP
+        
+        if restraint_type == "go":
+            expr = "k*(5*(s/r)^12-6*(s/r)^10); s=s; k=k"
+            cs = mm.CustomBondForce(expr)
+            cs.addPerBondParameter("s")
+            cs.addPerBondParameter("k")
+        else:
+            cs = mm.HarmonicBondForce()
+        
+        cs.setUsesPeriodicBoundaryConditions(True)
+        n_bonds = 0
+        
+        for meta in chain_meta:
+            if not meta["folded_domains"]:
+                continue
+            chain_start = meta["start"]
+            for (dom_s, dom_e) in meta["folded_domains"]:
+                a0 = chain_start + dom_s - 1   # absolute, 0-based
+                a1 = chain_start + dom_e        # exclusive
+                indices = list(range(a0, a1))
+                for ii in range(len(indices)):
+                    for jj in range(ii + min_seq_sep, len(indices)):
+                        gi, gj = indices[ii], indices[jj]
+                        d = float(np.linalg.norm(positions[gi] - positions[gj]))
+                        if d <= cutoff:
+                            if restraint_type == "go":
+                                cs.addBond(gi, gj,
+                                           [d * unit.nanometer,
+                                            k * unit.kilojoule_per_mole])
+                            else:
+                                cs.addBond(
+                                    gi, gj,
+                                    d * unit.nanometer,
+                                    k * unit.kilojoule_per_mole / unit.nanometer ** 2)
+                            n_bonds += 1
+        
+        return cs if n_bonds > 0 else None
 
     # ------------------------------------------------------------------
 

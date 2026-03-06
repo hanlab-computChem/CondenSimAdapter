@@ -1,7 +1,0 @@
-file_op.o: file_op.c file_op.h
-genPairPACE13.o: genPairPACE13.c string_op.h file_op.h parse_cg.h \
-  geom_op.h
-geom_op.o: geom_op.c geom_op.h
-numrecp.o: numrecp.c numrecp.h
-parse_cg.o: parse_cg.c file_op.h string_op.h parse_cg.h
-string_op.o: string_op.c string_op.h

@@ -92,8 +92,8 @@ class CGForceField(ABC):
             positions:      (N, 3) nm array of initial CA coordinates.
             chain_meta:     Per-chain metadata with 'folded_domains'.
             restraint_type: 'harmonic' or 'go' (Go-like 10-12 potential).
-            k:              Spring constant kJ/mol/nm^2 (harmonic) or well depth.
-            cutoff:         Contact distance cutoff in nm.
+            k:              Spring constant kJ/mol/nm^2 (harmonic) or well depth. Default 700.0 (CALVADOS standard).
+            cutoff:         Contact distance cutoff in nm. Default 0.9 nm (CALVADOS standard).
 
         Returns:
             Force object or None if no folded domains exist.

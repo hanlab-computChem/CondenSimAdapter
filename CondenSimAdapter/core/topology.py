@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 
+import openmm as mm
 import openmm.app as app
 import openmm.unit as unit
 
@@ -29,6 +30,23 @@ RESIDUE_MASS: Dict[str, float] = {
 }
 
 
+def _box_vectors(box: List[float]) -> unit.Quantity:
+    """
+    Build a single Quantity([Vec3_a, Vec3_b, Vec3_c], nm).
+
+    openmm.app.pdbfile.computeLengthsAndAngles branches on is_quantity(vectors):
+      - True  -> .value_in_unit(nm) -> plain Vec3 objects -> norm() returns float  OK
+      - False -> unpacks directly   -> norm() returns Quantity -> '%f' % Qty  FAIL
+
+    The topology box MUST be a single Quantity, not a bare list of Quantities.
+    """
+    bx, by, bz = float(box[0]), float(box[1]), float(box[2])
+    return unit.Quantity(
+        [mm.Vec3(bx, 0, 0), mm.Vec3(0, by, 0), mm.Vec3(0, 0, bz)],
+        unit.nanometer,
+    )
+
+
 def build_topology(
     chain_meta: List[dict],
     positions: np.ndarray,
@@ -44,35 +62,31 @@ def build_topology(
         box:        [Lx, Ly, Lz] in nm.
 
     Returns:
-        topology:   OpenMM Topology object.
+        topology:   OpenMM Topology object with periodic box set.
         positions:  (N, 3) Quantity in nm (same data, wrapped in unit).
     """
     top = app.Topology()
 
-    # Use the virtual 'element' for CG beads; we pick a lightweight element
-    # and override the mass later at the System level.
-    ca_elem = app.element.carbon   # placeholder; mass overridden in force field
+    # Use carbon as a placeholder element; mass is overridden at the System level.
+    ca_elem = app.element.carbon
 
     for meta in chain_meta:
         chain_obj = top.addChain()
         seq = meta["sequence"]
-        for res_idx, aa in enumerate(seq):
+        for aa in seq:
             three = ONE_TO_THREE.get(aa, "GLY")
             res = top.addResidue(three, chain_obj)
             top.addAtom("CA", ca_elem, res)
 
-    # Add backbone bonds (CA i -- CA i+1 within each chain)
+    # Add backbone bonds (CA_i -- CA_{i+1} within each chain)
     atoms = list(top.atoms())
     for meta in chain_meta:
         for i in range(meta["start"], meta["end"] - 1):
             top.addBond(atoms[i], atoms[i + 1])
 
-    # Periodic box
-    top.setPeriodicBoxVectors([
-        unit.Quantity([box[0], 0, 0], unit.nanometer),
-        unit.Quantity([0, box[1], 0], unit.nanometer),
-        unit.Quantity([0, 0, box[2]], unit.nanometer),
-    ])
+    # Set periodic box as a single Quantity([Vec3, Vec3, Vec3], nm)
+    # so that PDBFile.writeHeader can extract plain float lengths correctly.
+    top.setPeriodicBoxVectors(_box_vectors(box))
 
     pos_quantity = positions * unit.nanometer
     return top, pos_quantity

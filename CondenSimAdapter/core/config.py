@@ -107,6 +107,9 @@ class CGConfig:
     ionic_strength: float  = 0.15      # M
     simulation: SimulationParams = field(default_factory=SimulationParams)
 
+    # Slab-specific (CALVADOS legacy default: 100 nm)
+    slab_width: float = 100.0            # nm, matches CALVADOS default_config.yaml
+
     # Droplet-specific
     droplet_radius: Optional[float] = None   # nm
     droplet_k: float = 1.0                   # kJ/mol/nm^2 (confinement spring)
@@ -114,6 +117,20 @@ class CGConfig:
     @property
     def n_molecules(self) -> int:
         return sum(c.nmol for c in self.components)
+
+    @property
+    def resolved_force_field(self) -> str:
+        """Resolve 'calvados' to the appropriate version based on component types.
+
+        CALVADOS2 is parameterized for IDPs only.
+        CALVADOS3 extends it to folded/mixed-disorder proteins (MDP).
+        If the user simply writes force_field: calvados, the backend picks
+        the correct version automatically.
+        """
+        if self.force_field == "calvados":
+            has_mdp = any(c.comp_type == ComponentType.MDP for c in self.components)
+            return "calvados3" if has_mdp else "calvados2"
+        return self.force_field
 
     def get_component(self, name: str) -> Optional[Component]:
         for c in self.components:
@@ -125,17 +142,21 @@ class CGConfig:
     def from_dict(cls, d: dict) -> CGConfig:
         components = [Component.from_dict(c) for c in d.get("components", [])]
         topol_str = d.get("topol", d.get("topology", "cubic")).lower()
+        # "grid" is CALVADOS's name for a cubic periodic box
+        if topol_str == "grid":
+            topol_str = "cubic"
         box_raw = d.get("box", [20.0, 20.0, 20.0])
         sim_raw = d.get("simulation", {})
         return cls(
             system_name   = d.get("system_name", d.get("sysname", "system")),
-            force_field   = d.get("force_field", d.get("ff", "calvados2")).lower(),
+            force_field   = d.get("force_field", d.get("ff", "calvados")).lower(),
             components    = components,
             box           = [float(x) for x in box_raw],
             topology      = TopologyType(topol_str),
             temperature   = float(d.get("temperature", d.get("temp", 300.0))),
             ionic_strength= float(d.get("ionic_strength", d.get("ionic", 0.15))),
             simulation    = SimulationParams.from_dict(sim_raw),
+            slab_width    = float(d.get("slab_width", 100.0)),
             droplet_radius= d.get("droplet_radius"),
             droplet_k     = float(d.get("droplet_k", 1.0)),
         )
@@ -170,6 +191,9 @@ def _read_fasta(path: str, name: Optional[str] = None) -> str:
         for line in f:
             line = line.strip()
             if line.startswith(">"):
+                # If we already found and collected our target sequence, return it
+                if found and seq_lines:
+                    return "".join(seq_lines)
                 header = line[1:]
                 found = (name is None) or (name in header)
                 seq_lines = []

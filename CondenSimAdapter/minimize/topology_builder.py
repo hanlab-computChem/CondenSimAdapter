@@ -166,12 +166,8 @@ def run_pdb2gmx_for_topology(
         ff_folder_name = Path(ff_path).name
         target_ff_path = output_dir / ff_folder_name
         if not target_ff_path.exists():
-            print(f"    Copying force field to execution directory...")
             shutil.copytree(ff_path, target_ff_path)
-            print(f"    Force field: {ff_folder_name}")
-        else:
-            print(f"    Force field already present: {ff_folder_name}")
-    
+
     cmd = [
         'gmx', 'pdb2gmx',
         '-f', str(cleaned_pdb),
@@ -185,12 +181,8 @@ def run_pdb2gmx_for_topology(
         cmd.append('-ss')
     if his_type is not None:
         cmd.append('-his')
-    
-    print(f"    Command: {' '.join(cmd)}")
-    print(f"    CWD: {output_dir}")
-    
+
     try:
-        # Run pdb2gmx from output_dir so it can find the force field
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -198,31 +190,20 @@ def run_pdb2gmx_for_topology(
             input=_build_pdb2gmx_input(disable_disulfide, his_type, his_repeat_count),
             cwd=str(output_dir)
         )
-        
+
         if result.returncode != 0:
             raise RuntimeError(f"pdb2gmx failed: {result.stderr[-300:]}")
-        
-        # pdb2gmx creates topol.top in the CWD (output_dir)
-        # Check if it was created there
+
         topol_in_cwd = output_dir / "topol.top"
         if topol_in_cwd.exists() and not final_top.exists():
-            print(f"    Topology found in CWD, moving to expected location")
             shutil.move(str(topol_in_cwd), str(final_top))
-            # Also move any itp files that were created
-            for f in output_dir.glob('*.itp'):
-                if f.name not in ['posre.itp'] and not (output_dir / f.name).exists():
-                    pass  # Files are already in output_dir
-        
+
         if not final_top.exists():
             raise RuntimeError(f"Topology not generated: {final_top}")
-        
-        print(f"    Topology generated: {final_top.name}")
-        
-        # Modify molecule name in topology
+
         modify_topology_molecule_name(final_top, molecule_name)
-        
         return final_top
-    
+
     except Exception as e:
         print(f"    Error in pdb2gmx: {e}")
         raise
@@ -255,7 +236,7 @@ def modify_topology_molecule_name(topol_path: Path, molecule_name: str):
     with open(topol_path, 'w') as f:
         f.writelines(lines)
     
-    print(f"    Modified molecule name to: {molecule_name}")
+    pass  # molecule name updated silently
 
 
 # =============================================================================
@@ -290,7 +271,7 @@ def generate_all_atom_topology(
         - List of dicts: [{'name': comp.name, 'topology': top_path, 'nmol': comp.nmol}, ...]
         - Water model name for this force field
     """
-    from .cg import ComponentType
+    from ..core.config import ComponentType, Component
     
     output_dir = Path(output_dir)
     
@@ -301,13 +282,11 @@ def generate_all_atom_topology(
     water_model = ff_info.water_model if ff_info else "tip3p"
     
     for comp in components:
-        print(f"\n  Generating topology for component: {comp.name}")
-        
         # Determine input PDB based on component type
-        if comp.type == ComponentType.IDP:
+        if comp.comp_type == ComponentType.IDP:
             # IDP: Generate structure from sequence using PCcli
             sequence = _get_component_sequence(comp)
-            print(f"    IDP: Sequence length: {len(sequence)} residues")
+            print(f"  [{comp.name}] IDP  {len(sequence)} residues")
             
             pccli_pdb = output_dir / f"{comp.name}_pccli.pdb"
             if not run_pccli(sequence, pccli_pdb, comp.name):
@@ -315,19 +294,19 @@ def generate_all_atom_topology(
             
             input_pdb = pccli_pdb
             
-        elif comp.type == ComponentType.MDP:
+        elif comp.comp_type == ComponentType.MDP:
             # MDP: Use user-provided fpdb (folded structure)
-            if not comp.fpdb:
+            if not comp.pdb_path:
                 raise ValueError(f"MDP component '{comp.name}' requires fpdb file")
             
-            input_pdb = Path(comp.fpdb)
+            input_pdb = Path(comp.pdb_path)
             if not input_pdb.exists():
                 raise FileNotFoundError(f"fpdb not found: {input_pdb}")
             
-            print(f"    MDP: Using fpdb: {input_pdb.name}")
+            print(f"  [{comp.name}] MDP  {input_pdb.name}")
         
         else:
-            raise ValueError(f"Unknown component type: {comp.type}")
+            raise ValueError(f"Unknown component type: {comp.comp_type}")
         
         # Run pdb2gmx for topology (use "none" for water model)
         comp_top_dir = output_dir / comp.name
@@ -361,19 +340,19 @@ def _get_component_sequence(comp: CGComponent) -> str:
     Returns:
         Sequence string
     """
-    from .cg import ComponentType
+    from ..core.config import ComponentType, Component
     
-    if comp.seq:
-        return comp.seq
+    if comp.sequence:
+        return comp.sequence
     
-    if comp.type == ComponentType.IDP:
-        if comp.ffasta:
-            return _read_fasta(comp.ffasta, comp.name)
+    if comp.comp_type == ComponentType.IDP:
+        if comp.fasta_path:
+            return _read_fasta(comp.fasta_path, comp.name)
         else:
             raise ValueError(f"Component '{comp.name}' is IDP but no ffasta file")
-    elif comp.type == ComponentType.MDP:
-        if comp.fpdb:
-            return _seq_from_pdb(comp.fpdb)
+    elif comp.comp_type == ComponentType.MDP:
+        if comp.pdb_path:
+            return _seq_from_pdb(comp.pdb_path)
         else:
             raise ValueError(f"Component '{comp.name}' is MDP but no fpdb file")
     
@@ -571,7 +550,7 @@ def merge_topologies(
         for comp in component_topologies:
             f.write(f"{comp['name']}\t{comp['nmol']}\n")
     
-    print(f"    Merged topology: {merged_top.name}")
+        pass  # merged silently
     return merged_top
 
 
@@ -646,8 +625,7 @@ def run_pdb2gmx_for_structure(
     elif not input_path.is_file():
         raise FileNotFoundError(f"Input path does not exist: {input_pdb}")
     
-    # Now input_path is definitely a file
-    print(f"    Using PDB file: {input_path}")
+    # input_path is now definitely a file
     
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -664,12 +642,8 @@ def run_pdb2gmx_for_structure(
         ff_folder_name = Path(ff_path).name
         target_ff_path = pdb2gmx_cwd / ff_folder_name
         if not target_ff_path.exists():
-            print(f"    Copying force field to execution directory...")
             shutil.copytree(ff_path, target_ff_path)
-            print(f"    Force field: {ff_folder_name}")
-        else:
-            print(f"    Force field already present: {ff_folder_name}")
-    
+
     output_gro = output_dir / "processed.gro"
     cmd = [
         'gmx', 'pdb2gmx',
@@ -684,9 +658,6 @@ def run_pdb2gmx_for_structure(
         cmd.append('-ss')
     if his_type is not None:
         cmd.append('-his')
-    
-    print(f"    Command: {' '.join(cmd)}")
-    print(f"    CWD: {pdb2gmx_cwd}")
     
     try:
         result = subprocess.run(
@@ -703,9 +674,8 @@ def run_pdb2gmx_for_structure(
         if not output_gro.exists():
             raise RuntimeError(f"Structure file not found: {output_gro}")
         
-        print(f"    Structure generated: {output_gro.name}")
         return output_gro
-    
+
     except Exception as e:
         print(f"    Error in pdb2gmx: {e}")
         raise

@@ -44,7 +44,9 @@ class CGSimulation:
 
     def __init__(self, config: CGConfig):
         self.config = config
-        self.ff: CGForceField = create_forcefield(config.force_field)
+        # Use resolved_force_field so that bare 'calvados' is auto-versioned
+        # (CALVADOS2 for all-IDP systems, CALVADOS3 when MDP components are present)
+        self.ff: CGForceField = create_forcefield(config.resolved_force_field)
         self._result: Optional[SimulationResult] = None
 
     # ------------------------------------------------------------------
@@ -124,9 +126,10 @@ class CGSimulation:
             sim_params.dt * unit.picosecond,
         )
 
-        openmm_platform, platform_props = _resolve_platform(
+        openmm_platform, platform_props, actual_platform = _resolve_platform(
             sim_params.platform, gpu_id
         )
+        print(f"  Platform:    {actual_platform}", flush=True)
         simulation = app.Simulation(
             topology, system, integrator,
             openmm_platform, platform_props
@@ -253,28 +256,38 @@ def _resolve_platform(
     platform_name: str,
     gpu_id: int,
 ):
-    """
-    Select the best available OpenMM platform.
+    """Select the best available OpenMM platform with a real GPU probe.
 
-    Falls back to CPU if the requested platform is unavailable.
+    Unlike getPlatformByName() alone, this actually tries to create a tiny
+    mm.Context to confirm the GPU is usable before returning it.  Falls back
+    to CPU and prints a warning if the GPU fails.
+
+    Returns (platform, properties, actual_platform_name).
     """
     preferred = platform_name.upper()
+    plat_name_map = {"CUDA": "CUDA", "OPENCL": "OpenCL"}
 
-    if gpu_id >= 0 and preferred in ("CUDA", "OPENCL"):
+    if preferred in plat_name_map:
         try:
-            plat = mm.Platform.getPlatformByName(preferred.capitalize()
-                                                 if preferred == "Opencl"
-                                                 else preferred)
+            plat = mm.Platform.getPlatformByName(plat_name_map[preferred])
             props = {"DeviceIndex": str(gpu_id), "Precision": "mixed"}
-            return plat, props
-        except Exception:
-            log.warning(f"{preferred} not available -- falling back to CPU.")
+            # Real probe: create a tiny context to verify the GPU is accessible
+            _sys = mm.System(); _sys.addParticle(1.0)
+            _ctx = mm.Context(_sys, mm.VerletIntegrator(0.001), plat, props)
+            del _ctx, _sys
+            return plat, props, f"{plat_name_map[preferred]}:{gpu_id}"
+        except Exception as e:
+            print(
+                f"  [warn] {preferred} GPU {gpu_id} unavailable ({e}); "
+                "falling back to CPU.",
+                flush=True,
+            )
 
     try:
         plat = mm.Platform.getPlatformByName("CPU")
     except Exception:
         plat = mm.Platform.getPlatformByName("Reference")
-    return plat, {}
+    return plat, {}, plat.getName()
 
 
 # ---------------------------------------------------------------------------

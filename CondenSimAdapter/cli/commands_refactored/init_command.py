@@ -14,7 +14,10 @@ import click_option_group as cog
 
 from ..shared import (
     CG_FORCE_FIELDS,
+    CG_FF_ALIASES,
     GEOMETRY_DEFAULTS,
+    normalize_cg_ff,
+    validate_cg_force_field,
     parse_component_pattern,
     parse_box,
     generate_yaml_with_comments,
@@ -25,9 +28,11 @@ from ..shared import (
 @cog.optgroup.group(name="Component Options", help="Force field, component type, and molecule count settings")
 @cog.optgroup.option(
     '--ff', '-ff',
-    type=click.Choice(CG_FORCE_FIELDS),
+    type=str,
     default='calvados',
-    help='Force field (default: calvados)'
+    callback=validate_cg_force_field,
+    is_eager=True,
+    help=f"Force field. One of: {', '.join(CG_FORCE_FIELDS)}. Default: calvados (auto-selects CALVADOS2/3 based on components)"
 )
 @cog.optgroup.option(
     '--type',
@@ -207,21 +212,22 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
             ])
             component_note = "Mixed IDP + MDP"
     
-    # Create config (without platform in simulation params)
-    from ...core.config import CGConfig as CGSimulationConfig, Component as CGComponent, TopologyType
-    SimulationParams = None  # not used in init path
+    # Create config
+    from ...core.config import CGConfig as CGSimulationConfig, Component as CGComponent, TopologyType, SimulationParams
+    # CLI name 'grid' maps to the internal TopologyType 'cubic'
+    _topol_internal = {"grid": "cubic"}.get(topol, topol)
     config = CGSimulationConfig(
         system_name=name,
+        force_field=ff,
         box=box_values,
         temperature=temperature,
-        ionic=ionic,
-        topol=TopologyType(topol),
+        ionic_strength=ionic,
+        topology=TopologyType(_topol_internal),
         components=[CGComponent.from_dict(c) for c in component_list],
         simulation=SimulationParams(
             steps=steps,
             wfreq=5000,
-            verbose=True
-        )
+        ),
     )
     
     # Output path (current directory)
