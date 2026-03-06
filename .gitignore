@@ -133,3 +133,8 @@ consisitency/
 
 # Tutorial run outputs (generated, not source)
 Tutorials/**/run/
+
+# AI Model checkpoints - downloaded from GitHub Releases at runtime
+*.ckpt
+*.pth
+*.pt
