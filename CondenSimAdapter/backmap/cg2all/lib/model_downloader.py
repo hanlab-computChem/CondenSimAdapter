@@ -17,7 +17,7 @@ import sys
 GITHUB_RELEASE_URL = "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v{version}/{filename}"
 
 # Default version to download
-DEFAULT_VERSION = "0.1.0"
+DEFAULT_VERSION = "1.0.0-beta"
 
 # Model file mapping
 MODEL_FILES = {
