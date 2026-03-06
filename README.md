@@ -1,44 +1,48 @@
 # CondenSimAdapter
 
-CondenSimAdapter is an automated workflow for protein condensate simulations, covering the main stages from CG to AA.
+CondenSimAdapter is an automated workflow for protein condensate simulations, covering the main stages from coarse-grained (CG) to all-atom (AA).
 
 ## Installation
 
-### 1. Create a conda environment
+### Quick Start
 
 ```bash
+# 1. Create a conda environment
 conda create -n conden python=3.11 -y
 conda activate conden
+
+# 2. Install from PyPI
+pip install CondenSimAdapter
+
+# 3. Verify installation
+adapter --version
 ```
 
-### 2. Download and install dependency
+### Installation Options
 
-Download the zip from GitHub webpage or run:
-
+#### Core Package Only
 ```bash
-wget https://github.com/hanlab-computChem/CondenSimAdapter/archive/refs/heads/main.zip
+pip install CondenSimAdapter
 ```
 
-Unzip and enter the directory:
-
+#### With Simulation Dependencies (recommended)
 ```bash
-unzip CondenSimAdapter-master.zip
-cd CondenSimAdapter-master
+pip install "CondenSimAdapter[sim]"
 ```
+This includes OpenMM, MDAnalysis, mdtraj, and other simulation tools.
 
-Run the installation script:
-
+#### With Machine Learning Dependencies (for neural network backmapping)
 ```bash
-bash install.sh
+pip install "CondenSimAdapter[ml]"
 ```
+This includes PyTorch, DGL, and e3nn for CG-to-AA backmapping.
 
-### 3. Install CondenSimAdapter
-
+#### Full Installation (everything)
 ```bash
-pip install .
+pip install "CondenSimAdapter[all]"
 ```
 
-### 4. For COCOMO multidomain protein simulations (Optional)
+### Optional: COCOMO Multidomain Protein Support
 
 ```bash
 pip install git+https://github.com/feiglab/mdsim.git
@@ -47,21 +51,62 @@ pip install numpy==1.26.4 mdtraj==1.11.0
 
 Note: `mdsim` claims it needs higher dependency versions, but downgrading `numpy` and `mdtraj` to the versions above does not affect COCOMO simulations.
 
-### 5. Run test 
+## Development Installation
+
+If you want to modify the source code:
 
 ```bash
-python -m pytest
+git clone https://github.com/hanlab-computChem/CondenSimAdapter.git
+cd CondenSimAdapter
+pip install -e ".[dev]"
 ```
 
-### 6. Run with CondenSimAdapter command adapter
+## Testing
 
 ```bash
-adapter -h 
+# Run tests
+pytest tests/
+
+# Run with coverage
+pytest tests/ --cov=CondenSimAdapter
+```
+
+## Usage
+
+### Command Line Interface
+
+```bash
+# Show help
+adapter --help
+
+# Run backmapping
+adapter backmap -c cg_structure.pdb -o aa_structure.pdb
+
+# Check model status
+adapter models status
+```
+
+### Python API
+
+```python
+from CondenSimAdapter import backmap
+
+# Backmap CG structure to AA
+backmap.convert("cg_input.pdb", "aa_output.pdb")
 ```
 
 ## Requirements
 
-- Python = 3.11
-- CUDA >= 12.1
+- Python >= 3.10, < 3.12 (3.11 recommended)
+- CUDA >= 12.1 (for ML features)
+- GROMACS >= 2023 (install separately)
 
-- GROMACS >= 2023 (install it yourself)
+## Links
+
+- **PyPI**: https://pypi.org/project/CondenSimAdapter/
+- **Documentation**: https://github.com/hanlab-computChem/CondenSimAdapter#readme
+- **Issues**: https://github.com/hanlab-computChem/CondenSimAdapter/issues
+
+## License
+
+GPL-3.0
