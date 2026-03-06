@@ -1,62 +1,99 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "CondenSimAdapter"
 version = "0.2.0"
-description = "Automated CG-to-AA workflow for protein condensate simulations."
+description = "Automated CG-to-AA workflow for protein condensate simulations"
 authors = [{ name = "Xiaojing Tian", email = "tianxj15@tsinghua.org" }]
 license = { text = "GPL-3.0" }
-requires-python = "==3.11.*"
+requires-python = ">=3.10,<3.12"
+readme = "README.md"
+keywords = ["protein", "condensate", "simulation", "coarse-grained", "molecular-dynamics", "openmm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 
-# Core runtime dependencies.
-# Heavy scientific packages (openmm, torch, dgl) must be installed via
-# the conda/pip channel specified in install.sh because they require
-# CUDA-matched builds.  Only lightweight deps are listed here.
+# Core dependencies - lightweight, always required
 dependencies = [
     "click>=8.0",
-    "pyyaml>=6.0",
-    "numpy>=1.26",
-    "tqdm>=4.0",
     "click-option-group>=0.5",
+    "pyyaml>=6.0",
+    "numpy>=1.26,<2.0",
+    "tqdm>=4.0",
+    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
-# Full scientific stack (install with: pip install -e ".[sim]")
+# CG simulation dependencies
 sim = [
     "openmm>=8.2",
     "mdtraj>=1.10",
-    "MDAnalysis>=2.6",
+    "MDAnalysis>=2.6,<3.0",
     "biopython>=1.81",
     "parmed",
     "gromacswrapper",
-    "scipy",
+    "scipy>=1.10",
+    "matplotlib>=3.5",
+    "networkx>=2.8",
+    "numba>=0.60",
+    "jinja2",
+    "statsmodels",
+    "PeptideConstructor",
 ]
+
+# Neural network backmapping (optional, requires CUDA-matched PyTorch)
 ml = [
-    # Neural backmapping; requires matching CUDA build
-    "torch>=2.1",
+    "torch>=2.1,<2.2",
     "dgl>=2.1",
     "e3nn>=0.5",
+    "torchdata>=0.7",
+    "ml-collections>=0.1",
 ]
+
+# Everything
+all = ["CondenSimAdapter[sim,ml]"]
+
+# Development dependencies
 dev = [
     "pytest>=7",
     "pytest-cov",
     "ruff",
+    "black",
+    "mypy",
 ]
 
 [project.scripts]
 adapter = "CondenSimAdapter.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/hanlab-computChem/CondenSimAdapter"
+Documentation = "https://github.com/hanlab-computChem/CondenSimAdapter#readme"
+Repository = "https://github.com/hanlab-computChem/CondenSimAdapter"
+Issues = "https://github.com/hanlab-computChem/CondenSimAdapter/issues"
+Changelog = "https://github.com/hanlab-computChem/CondenSimAdapter/blob/main/CHANGELOG.md"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["CondenSimAdapter*"]
+exclude = ["tests*", "docs*", "old_code*", "consisitency*", ".github*"]
 
 [tool.setuptools.package-data]
 CondenSimAdapter = [
-    "forcefield/**/*",
+    "forcefield/**/*.itp",
+    "forcefield/**/*.ff/**/*",
     "core/forcefield/data/*",
     "backmap/cg2all/data/*",
+    # Include model files (~189MB) - will request size limit increase from PyPI
     "backmap/cg2all/model/*.ckpt",
 ]
 
@@ -64,7 +101,15 @@ CondenSimAdapter = [
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -W ignore"
-markers = ["slow: long-running tests"]
+markers = [
+    "slow: long-running tests",
+    "gpu: tests requiring GPU",
+    "gmx: tests requiring GROMACS",
+]
