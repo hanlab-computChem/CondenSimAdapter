@@ -1,0 +1,135 @@
+# ===========================================
+# CondenSimAdapter GitHub Repository
+# ===========================================
+
+# -------------------------------------------------
+# External Dependencies (使用 submodule 或单独安装)
+# -------------------------------------------------
+source_code_of_extern/
+to_hanw/
+test_real_system/
+CTD/
+FUS/
+.history/
+# -------------------------------------------------
+# Python
+# -------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.egg-info/
+MANIFEST
+
+# -------------------------------------------------
+# Virtual Environments
+# -------------------------------------------------
+venv/
+ENV/
+env/
+.venv/
+
+# -------------------------------------------------
+# Testing
+# -------------------------------------------------
+.pytest_cache/
+.coverage
+.htmlcov/
+.pytest_cache/
+*.cover
+.hypothesis/
+tests/.pytest_cache/
+
+# -------------------------------------------------
+# IDE and Editor
+# -------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.cursor/
+
+# -------------------------------------------------
+# Git Internal (Local only)
+# -------------------------------------------------
+# Note: .gitignore itself should NOT be ignored
+.gitattributes
+.cursorignore
+
+# -------------------------------------------------
+# Temporary Files
+# -------------------------------------------------
+*.tmp
+*.temp
+tmp/
+temp/
+
+# -------------------------------------------------
+# Logs
+# -------------------------------------------------
+*.log
+logs/
+*.out
+
+# -------------------------------------------------
+# OS Generated
+# -------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# -------------------------------------------------
+# Local Configuration
+# -------------------------------------------------
+*.local
+.config/
+.secrets/
+
+# -------------------------------------------------
+# Large Files (>10MB) - Use Git LFS or external storage
+# -------------------------------------------------
+# Molecular dynamics trajectories (always ignore)
+*.xtc
+*.trr
+*.dcd
+*.nc
+*.h5
+
+# Compressed archives (always ignore)
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tbz2
+*.tar.xz
+*.7z
+*.rar
+
+# Backup directories (never commit these)
+old_code/
+consisitency/
+
+# Tutorial run outputs (generated, not source)
+Tutorials/**/run/
