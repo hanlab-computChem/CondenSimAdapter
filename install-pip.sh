@@ -37,22 +37,23 @@ if [[ "$CURRENT_PY" != "$PYTHON_VERSION"* ]]; then
 fi
 
 # Step 1: Install PyTorch + DGL (CUDA 12.x ecosystem, targeting CUDA 12.4)
+# dgl 2.1.0 is the last PyPI release and is API-compatible with this package.
 echo ""
 echo "📦 Step 1/4: Installing PyTorch + DGL ($INSTALL_TYPE)..."
 if [ "$INSTALL_TYPE" = "gpu-cuda12" ] || [ "$INSTALL_TYPE" = "gpu" ]; then
     # CUDA 12.4 wheels; backward-compatible with CUDA 12.0-12.4 drivers
     pip install "torch>=2.4,<2.5" torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu124
-    pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
+    pip install "dgl==2.1.0"
 elif [ "$INSTALL_TYPE" = "gpu-cuda13" ]; then
     pip install "torch>=2.4,<2.5" torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu124
-    pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
-    echo "  Note: using CUDA 12.4 wheels for torch/dgl; openmm will use cuda13 platform."
+    echo "  Note: using CUDA 12.4 wheels for torch; openmm will use cuda13 platform."
+    pip install "dgl==2.1.0"
 else
     pip install "torch>=2.4,<2.5" torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cpu
-    pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/repo.html
+    pip install "dgl==2.1.0"
 fi
 
 # Step 2: Install OpenMM and scientific packages
