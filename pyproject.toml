@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "CondenSimAdapter"
-version = "1.0.2.1b"
-description = "Automated CG-to-AA workflow for protein condensate simulations"
+version = "1.0.2.2b"
+description = "General purpose simulation builder for protein condenstate systems compatible with most of popular coarse-grained and all-atom forcefields"
 authors = [{ name = "Xiaojing Tian", email = "tianxj15@tsinghua.org" }]
 license = { text = "GPL-3.0" }
 requires-python = ">=3.10,<3.12"
@@ -31,7 +31,7 @@ dependencies = [
     "numpy>=1.26,<2.0",
     "tqdm>=4.0",
     "pydantic>=2.0",
-    "openmm>=8.2",
+    "openmm[cuda12]>=8.2",  # AMD GPU users may replace cuda12 with hip6/hip7; CPU-only: plain openmm>=8.2
     "mdtraj>=1.10",
     "MDAnalysis>=2.6,<3.0",
     "biopython>=1.81",
@@ -44,10 +44,10 @@ dependencies = [
     "jinja2",
     "statsmodels",
     "PeptideConstructor",
-    "torch>=2.1,<2.2",
-    "dgl>=2.1",
+    "torch>=2.4,<2.5",
+    "dgl>=2.4",
     "e3nn>=0.5",
-    "torchdata>=0.7,<0.8",
+    "torchdata>=0.11,<0.12",
     "ml-collections>=0.1",
 ]
 

@@ -7,11 +7,20 @@
 set -e
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
-INSTALL_TYPE="${1:-cpu}"  # cpu or gpu
+INSTALL_TYPE="${1:-cpu}"  # cpu, gpu-cuda12, gpu-cuda13, gpu-hip6, gpu-hip7
 
 echo "============================================"
 echo "CondenSimAdapter - pip Installation"
 echo "============================================"
+echo ""
+echo "Usage: bash install-pip.sh [INSTALL_TYPE]"
+echo "  INSTALL_TYPE options:"
+echo "    cpu          - CPU only (default)"
+echo "    gpu          - NVIDIA GPU, CUDA 12.x (alias for gpu-cuda12)"
+echo "    gpu-cuda12   - NVIDIA GPU, CUDA 12.x (recommended)"
+echo "    gpu-cuda13   - NVIDIA GPU, CUDA 13.x"
+echo "    gpu-hip6     - AMD GPU, ROCm/HIP 6"
+echo "    gpu-hip7     - AMD GPU, ROCm/HIP 7"
 echo ""
 
 # Check Python version
@@ -27,31 +36,54 @@ if [[ "$CURRENT_PY" != "$PYTHON_VERSION"* ]]; then
     fi
 fi
 
-# Step 1: Install PyTorch
+# Step 1: Install PyTorch + DGL (CUDA 12.x ecosystem, targeting CUDA 12.4)
 echo ""
-echo "📦 Step 1/4: Installing PyTorch ($INSTALL_TYPE)..."
-if [ "$INSTALL_TYPE" = "gpu" ]; then
-    pip install torch==2.1.2 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-    pip install dgl -f https://data.dgl.ai/wheels/torch-2.1/cu121/repo.html
+echo "📦 Step 1/4: Installing PyTorch + DGL ($INSTALL_TYPE)..."
+if [ "$INSTALL_TYPE" = "gpu-cuda12" ] || [ "$INSTALL_TYPE" = "gpu" ]; then
+    # CUDA 12.4 wheels; backward-compatible with CUDA 12.0-12.4 drivers
+    pip install "torch>=2.4,<2.5" torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu124
+    pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
+elif [ "$INSTALL_TYPE" = "gpu-cuda13" ]; then
+    pip install "torch>=2.4,<2.5" torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu124
+    pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
+    echo "  Note: using CUDA 12.4 wheels for torch/dgl; openmm will use cuda13 platform."
 else
-    pip install torch==2.1.2 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-    pip install dgl -f https://data.dgl.ai/wheels/torch-2.1/repo.html
+    pip install "torch>=2.4,<2.5" torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cpu
+    pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/repo.html
 fi
 
 # Step 2: Install OpenMM and scientific packages
+# CondenSimAdapter depends on openmm[cuda12] by default.
+# CPU-only users must override by installing plain openmm first, then the package with --no-deps.
 echo ""
 echo "📦 Step 2/4: Installing scientific packages..."
+if [ "$INSTALL_TYPE" = "gpu-cuda13" ]; then
+    OPENMM_PKG="openmm[cuda13]>=8.2"
+elif [ "$INSTALL_TYPE" = "gpu-hip6" ]; then
+    OPENMM_PKG="openmm[hip6]>=8.2"
+elif [ "$INSTALL_TYPE" = "gpu-hip7" ]; then
+    OPENMM_PKG="openmm[hip7]>=8.2"
+elif [ "$INSTALL_TYPE" = "cpu" ]; then
+    OPENMM_PKG="openmm>=8.2"
+else
+    # default: cuda12 (covers gpu, gpu-cuda12)
+    OPENMM_PKG="openmm[cuda12]>=8.2"
+fi
+
 pip install \
-    openmm>=8.2 \
-    mdtraj>=1.10 \
-    MDAnalysis>=2.6 \
-    biopython>=1.81 \
+    "${OPENMM_PKG}" \
+    "mdtraj>=1.10" \
+    "MDAnalysis>=2.6" \
+    "biopython>=1.81" \
     parmed \
     gromacswrapper \
-    scipy>=1.10 \
-    matplotlib>=3.5 \
-    networkx>=2.8 \
-    numba>=0.60 \
+    "scipy>=1.10" \
+    "matplotlib>=3.5" \
+    "networkx>=2.8" \
+    "numba>=0.60" \
     jinja2 \
     statsmodels \
     PeptideConstructor
