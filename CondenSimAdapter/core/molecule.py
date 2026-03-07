@@ -123,13 +123,12 @@ def place_chains_slab(
     """
     Place chains on a staggered 3D grid within a slab centred at z = Lz/2.
 
-    Matches CALVADOS legacy behavior:
     - Uses staggered grid placement (alternate layers offset by half grid spacing)
-    - Slab width defaults to min(Lx, Ly) / 2 if not provided
+    - Slab width defaults to 0.75 * Lz if not provided (assuming z is the long axis)
     - Grid is centered in z at box[2] / 2
     """
     if slab_width is None:
-        slab_width = min(box[0], box[1]) / 2.0
+        slab_width = box[2] * 0.6  # Default: 60% of z box dimension
     slab_box = [box[0], box[1], slab_width]
     grid_pts = _build_xyzgrid(len(chain_coords), slab_box)
     # shift to centre of z axis
@@ -264,22 +263,34 @@ def _build_linear(n: int, d: float = 0.38) -> np.ndarray:
 
 
 def _build_compact(n: int, d: float = 0.38) -> np.ndarray:
-    """Simple cubic lattice filling."""
-    side = int(np.ceil(n ** (1.0 / 3.0)))
-    coords = []
-    for ix in range(side):
-        for iy in range(side):
-            for iz in range(side):
-                coords.append([ix * d, iy * d, iz * d])
-                if len(coords) >= n:
-                    break
-            if len(coords) >= n:
-                break
-        if len(coords) >= n:
-            break
-    coords = np.array(coords[:n], dtype=np.float64)
-    coords -= coords.mean(axis=0)
-    return coords
+    """
+    Simple cubic lattice filling.
+    Matches CALVADOS build.build_compact implementation.
+    """
+    N = int(np.ceil(np.cbrt(n)) - 1)
+    xs = []
+    i, j, k = 0, 0, 0
+    di, dj, dk = 1, 1, 1  # direction
+    cti, ctj, ctk = 0, 0, 0
+
+    for idx in range(n):
+        xs.append([i, j, k])
+        if ctk == N:
+            if ctj == N:
+                i += di
+                cti += 1
+                ctj = 0
+                dj *= -1
+            else:
+                j += dj
+                ctj += 1
+            ctk = 0
+            dk *= -1
+        else:
+            k += dk
+            ctk += 1
+    xs = (np.array(xs) - 0.5 * N) * d
+    return xs
 
 
 def _build_xyzgrid(n: int, box: List[float]) -> np.ndarray:
