@@ -5,11 +5,11 @@
 ### Option 1: pip (Simplest - Recommended)
 
 ```bash
-# Install PyTorch + dependencies first (one-time setup)
-pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cu121  # or /cpu for CPU
-pip install dgl -f https://data.dgl.ai/wheels/torch-2.1/cu121/repo.html
+# Install PyTorch + DGL first (CUDA 12.4 ecosystem)
+pip install "torch>=2.4,<2.5" --index-url https://download.pytorch.org/whl/cu124
+pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
 
-# Install CondenSimAdapter (includes ~200MB models)
+# Install CondenSimAdapter
 pip install CondenSimAdapter
 
 # Done!
@@ -18,8 +18,11 @@ adapter --help
 
 Or use the install script:
 ```bash
-bash install-pip.sh gpu   # For GPU
-bash install-pip.sh cpu   # For CPU only
+bash install-pip.sh gpu-cuda12   # NVIDIA GPU, CUDA 12.x (recommended)
+bash install-pip.sh gpu-cuda13   # NVIDIA GPU, CUDA 13.x
+bash install-pip.sh gpu-hip6     # AMD GPU, ROCm/HIP 6
+bash install-pip.sh gpu-hip7     # AMD GPU, ROCm/HIP 7
+bash install-pip.sh cpu          # CPU only
 ```
 
 ### Option 2: conda (Coming Soon)
@@ -51,7 +54,7 @@ Models included:
 - Python 3.10 or 3.11
 - Linux x86_64 (primary support)
 - 500 MB disk space
-- CUDA 12.1 capable GPU (optional, CPU mode works too)
+- **CUDA 12.x** capable GPU with driver ≥ 525 (optional, CPU mode works too)
 
 ## 📋 Detailed Steps
 
@@ -69,19 +72,44 @@ conda activate csa
 
 ### Step 2: Install PyTorch Stack
 
-**For GPU (CUDA 12.1):**
+**For NVIDIA GPU (CUDA 12.x, recommended):**
 ```bash
-pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cu121
-pip install dgl -f https://data.dgl.ai/wheels/torch-2.1/cu121/repo.html
+# CUDA 12.4 wheels are backward-compatible with CUDA 12.0–12.4 drivers
+pip install "torch>=2.4,<2.5" --index-url https://download.pytorch.org/whl/cu124
+pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
 ```
 
 **For CPU only:**
 ```bash
-pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
-pip install dgl -f https://data.dgl.ai/wheels/torch-2.1/repo.html
+pip install "torch>=2.4,<2.5" --index-url https://download.pytorch.org/whl/cpu
+pip install dgl -f https://data.dgl.ai/wheels/torch-2.4/repo.html
 ```
 
-### Step 3: Install CondenSimAdapter
+### Step 3: Install OpenMM (with GPU acceleration)
+
+OpenMM's base package covers CPU, OpenCL, and Reference platforms. `CondenSimAdapter` depends on
+`openmm[cuda12]` by default (NVIDIA CUDA 12.x). If your setup differs, install the appropriate
+variant **before** installing `CondenSimAdapter`:
+
+```bash
+# NVIDIA GPU — CUDA 12.x (default, already pulled in by CondenSimAdapter)
+pip install "openmm[cuda12]>=8.2"
+
+# NVIDIA GPU — CUDA 13.x
+pip install "openmm[cuda13]>=8.2"
+
+# AMD GPU — ROCm/HIP 6
+pip install "openmm[hip6]>=8.2"
+
+# AMD GPU — ROCm/HIP 7
+pip install "openmm[hip7]>=8.2"
+
+# CPU / OpenCL only (override the default cuda12 dependency)
+pip install "openmm>=8.2"
+pip install --no-deps CondenSimAdapter   # skip re-pulling openmm[cuda12]
+```
+
+### Step 4: Install CondenSimAdapter
 
 ```bash
 # Install from PyPI
@@ -93,7 +121,7 @@ pip install "CondenSimAdapter[all]"
 
 This downloads ~200MB including all neural network models.
 
-### Step 4: Verify Installation
+### Step 5: Verify Installation
 
 ```bash
 # Check CLI
@@ -201,6 +229,6 @@ pytest tests/ -v
 ## 💡 Pro Tips
 
 1. **Use virtual environments** - Keeps dependencies isolated
-2. **Pin PyTorch version** - Use `torch==2.1.2` for compatibility
+2. **Pin PyTorch version** - Use `torch>=2.4,<2.5` for compatibility with this release
 3. **GPU vs CPU** - CPU version is fine for small systems
 4. **Check disk space** - Ensure 1 GB free for installation

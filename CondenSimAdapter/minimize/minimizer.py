@@ -366,44 +366,32 @@ class MinimizeSimulator:
         minimize_dir: Path,
     ) -> dict:
         """
-        Launch the three-stage softcore minimization as a subprocess.
+        Run three-stage softcore minimization directly in the current process.
 
-        The worker script (minimize/worker.py) does the actual OpenMM work
-        in a child process so it can be killed cleanly on error.
+        Runs in-process (no subprocess) to guarantee that the same CUDA/GPU
+        environment visible to the parent is used without any re-discovery issues.
         """
-        import sys
         from ..forcefield.registry import get_force_field as _get_ff
         ff_info = _get_ff(self.config.forcefield_type)
         ff_type = ff_info.family.lower() if ff_info else "amber"
         ff_name = ff_info.pdb2gmx_name if ff_info else self.config.forcefield_type
-        # Map platform CUDA/CPU/OpenCL → lowercase device name for worker.py
-        device = self.config.platform.lower()
+        device  = self.config.platform.lower()
 
-        worker = Path(__file__).parent / "worker.py"
-        cmd = [
-            sys.executable, str(worker),
-            "-i", structure_gro,
-            "-t", topology_top,
-            "-o", str(minimize_dir),
-            "-d", device,
-            "-g", str(self.config.gpu_id),
-            "--iter", str(self.config.max_iterations),
-            "--tolerance", str(self.config.tolerance),
-            "--ff-type", ff_type,
-            "--ff-name", ff_name,
-            "--gb-model", self.config.gb_model,
-            "--salt-conc", str(self.config.ion_concentration),
-            "--cutoff", str(self.config.nonbonded_cutoff),
-        ]
-        log.debug("minimize worker cmd: %s", " ".join(cmd))
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True,
-            cwd=str(minimize_dir.parent),
+        from .openmm_runner import run_minimization
+        run_minimization(
+            input_gro=structure_gro,
+            input_top=topology_top,
+            output_dir=str(minimize_dir),
+            device=device,
+            gpu_id=self.config.gpu_id,
+            max_iterations=self.config.max_iterations,
+            ff_type=ff_type,
+            ff_name=ff_name,
+            gb_model=self.config.gb_model,
+            salt_conc=self.config.ion_concentration,
+            cutoff=self.config.nonbonded_cutoff,
+            tolerance=self.config.tolerance,
         )
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"OpenMM minimization failed:\n{proc.stderr[-2000:]}"
-            )
 
         final_pdb = str(minimize_dir / "final.pdb")
         return {"final_pdb": final_pdb, "minimize_dir": str(minimize_dir)}
@@ -414,7 +402,13 @@ class MinimizeSimulator:
 
     def _resolve_ff_name(self, forcefield_type: str) -> str:
         """Convert registry key (e.g. '1-a99SBdisp') to pdb2gmx name (e.g. 'a99SBdisp')."""
-        # Strip leading numeric prefix if present
+        from ..forcefield.registry import get_force_field
+        
+        ff = get_force_field(forcefield_type)
+        if ff:
+            return ff.pdb2gmx_name
+        
+        # Fallback: strip leading numeric prefix
         parts = forcefield_type.split("-", 1)
         return parts[-1] if len(parts) > 1 else forcefield_type
 

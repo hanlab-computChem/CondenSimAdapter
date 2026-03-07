@@ -355,7 +355,7 @@ class TestCGConfig:
         assert config.droplet_k == 2.0
 
     def test_slab_specific_defaults(self):
-        """Test slab-specific default values."""
+        """Test slab-specific default values (0.6 * Lz)."""
         config = CGConfig(
             system_name="test",
             force_field="calvados",
@@ -363,7 +363,7 @@ class TestCGConfig:
             box=[50.0, 50.0, 200.0],
             topology=TopologyType.SLAB,
         )
-        assert config.slab_width == 100.0  # default
+        assert config.slab_width is None  # default is None (will use 0.6 * Lz at build time)
 
     def test_droplet_specific_defaults(self):
         """Test droplet-specific default values."""

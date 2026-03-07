@@ -107,8 +107,8 @@ class CGConfig:
     ionic_strength: float  = 0.15      # M
     simulation: SimulationParams = field(default_factory=SimulationParams)
 
-    # Slab-specific (CALVADOS legacy default: 100 nm)
-    slab_width: float = 100.0            # nm, matches CALVADOS default_config.yaml
+    # Slab-specific (default: 0.6 * Lz, assuming z is the long axis)
+    slab_width: Optional[float] = None   # nm, defaults to 0.6 * box[2] if None
 
     # Droplet-specific
     droplet_radius: Optional[float] = None   # nm
@@ -156,7 +156,7 @@ class CGConfig:
             temperature   = float(d.get("temperature", d.get("temp", 300.0))),
             ionic_strength= float(d.get("ionic_strength", d.get("ionic", 0.15))),
             simulation    = SimulationParams.from_dict(sim_raw),
-            slab_width    = float(d.get("slab_width", 100.0)),
+            slab_width    = float(d["slab_width"]) if "slab_width" in d else None,
             droplet_radius= d.get("droplet_radius"),
             droplet_k     = float(d.get("droplet_k", 1.0)),
         )

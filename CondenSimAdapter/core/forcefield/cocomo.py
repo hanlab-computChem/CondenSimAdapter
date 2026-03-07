@@ -304,9 +304,9 @@ class CocomoFF(CGForceField):
     @staticmethod
     def _compute_sasa(pdb_path: str) -> np.ndarray:
         """
-        Compute per-residue SASA using mdsim (matches original COCOMO implementation).
+        Compute per-residue SASA using internal Shrake-Rupley implementation.
         
-        Uses Shrake-Rupley algorithm with n_sphere_points=1920 (matching original COCOMO).
+        Uses n_sphere_points=1920 (matching original COCOMO implementation).
         Requires full-atom PDB (not CG CA-only structure).
         
         Args:
@@ -316,24 +316,8 @@ class CocomoFF(CGForceField):
             SASA values in nm^2 per residue, or None if calculation fails
         """
         try:
-            from mdsim import PDBReader
-        except ImportError:
-            return None
-
-        try:
-            s = PDBReader(pdb_path)
-            model = s[0]
-            
-            # Check if we have full-atom structure (not just CA)
-            mca = model.select_CA()
-            if mca.natoms() == model.natoms():
-                # CA-only structure, cannot compute meaningful SASA
-                return None
-            
-            # Compute SASA with same parameters as original COCOMO
-            # n_sphere_points=1920 matches original implementation
-            sasa_values = model.sasa_by_residue(n_sphere_points=1920)
-            return np.array(sasa_values)  # nm^2 per residue
+            from ..sasa import calc_sasa_from_pdb
+            return calc_sasa_from_pdb(pdb_path, n_sphere_points=1920)
         except Exception:
             return None
 
