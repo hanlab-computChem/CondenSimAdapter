@@ -78,7 +78,7 @@ backmap.convert("cg_input.pdb", "aa_output.pdb")
 ## Requirements
 
 - Python >= 3.10, < 3.12 (3.11 recommended)
-- CUDA >= 12.1 (for ML features)
+- CUDA >= 12.1 for cg2all backmapping
 - GROMACS >= 2023 (install separately)
 
 ## Links
