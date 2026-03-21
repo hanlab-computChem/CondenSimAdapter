@@ -934,7 +934,7 @@ class GromacsTopFileWithSoftcore(object):
     def createSystem(self, nonbondedMethod=ff.CutoffPeriodic, nonbondedCutoff=1.0*unit.nanometer, constraints=None,
                      rigidWater=True, ewaldErrorTolerance=0.0005, removeCMMotion=True, hydrogenMass=None, switchDistance=None,
                      nonbonded_type=NONBONDED_STANDARD, add_implicit_solvent=False, gb_model='OBC2', salt_conc=0.0,
-                     gaussian_width=0.085*unit.nanometer,
+                     gaussian_width=0.11*unit.nanometer,
                      soft_lambda=0.85, soft_alpha_lj=0.85, soft_alpha_coul=0.3, soft_sigma_coul=1.0):
         """Construct an OpenMM System representing the topology described by this
         top file.
@@ -977,7 +977,7 @@ class GromacsTopFileWithSoftcore(object):
             Implicit solvent model: "OBC1", "OBC2", "GBn", "GBn2" [NOT YET IMPLEMENTED]
         salt_conc : float=0.0
             Salt concentration (M) for Debye-Hückel screening [NOT YET IMPLEMENTED]
-        gaussian_width : Quantity=0.085*nanometer
+        gaussian_width : Quantity=0.11*nanometer
             Width parameter (ga_w) for Gaussian repulsion force in nm.
             Controls the "stiffness" of the repulsion.
         soft_lambda : float=0.85
@@ -2042,7 +2042,7 @@ def _defaultGromacsIncludeDir():
 # Three-stage optimization methods
 # ============================================================================
 
-def _create_gaussian_nb_force(nonbonded_cutoff, gaussian_width=0.085):
+def _create_gaussian_nb_force(nonbonded_cutoff, gaussian_width=0.11):
     """Create Gaussian repulsion force for initial untangling (Stage 1).
 
     Formula: E = ga_k * ga_h * exp(-(r/ga_w)^2)
@@ -2054,8 +2054,8 @@ def _create_gaussian_nb_force(nonbonded_cutoff, gaussian_width=0.085):
     ----------
     nonbonded_cutoff : Quantity
         Cutoff distance for nonbonded interactions
-    gaussian_width : float=0.085
-        Width parameter (ga_w) in nm. Default 0.085 nm (0.85 Å).
+    gaussian_width : float=0.11
+        Width parameter (ga_w) in nm. Default 0.11 nm (1.1 Å).
 
     Returns
     -------
