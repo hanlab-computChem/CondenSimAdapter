@@ -51,9 +51,9 @@ Examples:
                         help="Force field family (default: amber)")
     parser.add_argument("--ff-name",          default="amber99sb-ildn",
                         help="pdb2gmx force-field name (informational)")
-    parser.add_argument("--gb-model",         default="GBn2",
-                        choices=["GBn2", "OBC2"],
-                        help="Implicit solvent model (default: GBn2)")
+    parser.add_argument("--gb-model",         default="OBC2",
+                        choices=["OBC2", "GBn2"],
+                        help="Implicit solvent model (default: OBC2)")
     parser.add_argument("--salt-conc",        type=float, default=0.15,
                         help="Salt concentration in M (default: 0.15)")
     parser.add_argument("--cutoff",           type=float, default=2.0,
