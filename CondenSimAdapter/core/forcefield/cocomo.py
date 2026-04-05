@@ -72,7 +72,12 @@ class CocomoFF(CGForceField):
     SASA values are estimated from the initial CG structure using
     a simple neighbour-count model, consistent with Feig lab COCOMO.
     """
-    
+
+    # Original COCOMO does NOT exclude ENM pairs from VdW/electrostatics.
+    # The 10-5 LJ at native-contact distances contributes a small attractive
+    # energy that intentionally deepens the native-contact potential well.
+    _exclude_enm_from_nonbonded: bool = False
+
     # COCOMO-specific ENM parameters (matching original COCOMO implementation)
     ENM_K = 500.0       # kJ/mol/nm^2
     ENM_CUTOFF = 0.9    # nm

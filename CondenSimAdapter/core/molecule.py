@@ -14,6 +14,12 @@ from typing import List, Optional, Tuple
 
 from .config import Component, ComponentType, CGConfig, TopologyType
 
+# Minimum safe distance (nm) between any compact-IDR atom and any folded-domain atom
+# when building the initial MDP chain coordinates.  Chosen to exceed typical WF sigma
+# (~0.47 nm for Gly, ~0.57 nm for Trp) so no WF repulsion spike occurs for any
+# intra-chain IDR-folded pair that is not in the 1-2 backbone exclusion list.
+_MIN_IDR_CLEARANCE = 0.55
+
 
 # ---------------------------------------------------------------------------
 # Single-chain coordinate generation
@@ -93,6 +99,97 @@ def build_mdp_chain(
     return coords, seq
 
 
+def build_mdp_chain_compact_idr(
+    pdb_path: str,
+    folded_domains: List[Tuple[int, int]],
+    n_res: int,
+    use_com: bool = False,
+    spacing: float = 0.38,
+) -> np.ndarray:
+    """
+    Build MDP initial coordinates with compact IDR regions.
+
+    The folded domain residues are taken directly from the PDB CA positions.
+    IDR (disordered) regions are replaced by compact cubic builds anchored near
+    the folded domain termini, avoiding the extended IDR conformations that a
+    PDB from an MD run may carry (can span > 10 nm) and would cause severe
+    inter-chain clashes on the initial slab grid.
+
+    Args:
+        pdb_path:       Path to PDB file (all-atom or CA-only).
+        folded_domains: List of 1-based inclusive (start, end) domain ranges.
+        n_res:          Expected number of residues (from sequence).
+        use_com:        If True, use residue centre-of-mass instead of CA.
+        spacing:        Bond spacing in nm (default 0.38 nm).
+
+    Returns:
+        (n_res, 3) float64 array in nm, centred at origin.
+    """
+    coords_pdb, _ = build_mdp_chain(pdb_path, use_com=use_com)
+
+    if len(coords_pdb) != n_res or not folded_domains:
+        # Residue count mismatch or no domain info: fall back to raw PDB
+        return coords_pdb
+
+    coords = coords_pdb.copy()
+
+    # Collect 0-based folded residue indices
+    folded_set: set = set()
+    for dom_s, dom_e in folded_domains:
+        folded_set.update(range(dom_s - 1, dom_e))
+
+    # Folded domain centroid (used to determine outward direction)
+    folded_coords = coords_pdb[sorted(folded_set)]
+    folded_center = folded_coords.mean(axis=0)
+
+    for seg_start, seg_end in _get_idr_segments(n_res, folded_domains):
+        n_seg = seg_end - seg_start
+        if n_seg <= 0:
+            continue
+
+        # Number of layers in compact cube (same formula as _build_compact)
+        N = max(1, int(np.ceil(np.cbrt(n_seg)) - 1))
+
+        # Build compact structure centred at origin
+        idr_c = _build_compact(n_seg, spacing)
+        idr_c -= idr_c.mean(axis=0)
+
+        # Determine the anchor (folded terminus adjacent to this IDR segment)
+        # and the outward direction (away from the folded domain center).
+        if seg_start > 0 and (seg_start - 1) in folded_set:
+            # C-terminal IDR (or inter-domain IDR after a folded block)
+            anchor = coords_pdb[seg_start - 1]
+        else:
+            # N-terminal IDR (before first folded block)
+            anchor = coords_pdb[seg_end]
+
+        outward = anchor - folded_center
+        norm = np.linalg.norm(outward)
+        outward = outward / norm if norm > 1e-6 else np.array([0.0, 0.0, 1.0])
+
+        # Analytic lower bound for the clearance needed:
+        # The compact cube can have an atom at up to (N/2 * sqrt(3) * spacing)
+        # in the backward direction from the centroid (cube body diagonal worst case).
+        # We start the centroid at anchor + outward * d_start and then shift it
+        # outward iteratively until every IDR atom is >= _MIN_IDR_CLEARANCE nm from
+        # every folded-domain atom (like CALVADOS check_clash but for intra-chain).
+        max_backward = (N / 2.0) * np.sqrt(3.0) * spacing
+        d_start = max_backward + spacing   # initial clearance guess
+
+        idr_candidate = idr_c + (anchor + outward * d_start)
+        for _ in range(200):
+            dists = np.sqrt(
+                ((idr_candidate[:, None, :] - folded_coords[None, :, :]) ** 2).sum(axis=-1)
+            )
+            if dists.min() >= _MIN_IDR_CLEARANCE:
+                break
+            idr_candidate += outward * (spacing * 0.5)
+        coords[seg_start:seg_end] = idr_candidate
+
+    coords -= coords.mean(axis=0)
+    return coords
+
+
 # ---------------------------------------------------------------------------
 # Multi-chain placement
 # ---------------------------------------------------------------------------
@@ -119,21 +216,86 @@ def place_chains_slab(
     chain_coords: List[np.ndarray],
     box: List[float],
     slab_width: Optional[float] = None,
+    clash_cutoff: float = 0.7,
+    max_tries: int = 10_000,
 ) -> np.ndarray:
     """
-    Place chains on a staggered 3D grid within a slab centred at z = Lz/2.
+    Place chains randomly within a slab centred at z = Lz/2.
 
-    - Uses staggered grid placement (alternate layers offset by half grid spacing)
-    - Slab width defaults to 0.75 * Lz if not provided (assuming z is the long axis)
-    - Grid is centered in z at box[2] / 2
+    Adapted from CALVADOS build.random_placement (used for droplet topology),
+    extended here to restrict placement to the slab z-region and apply full
+    3-D PBC-aware clash detection via MDAnalysis distance_array.
+
+    This approach is necessary for MDP proteins where the folded domain + IDR
+    tails give a chain radius >> typical grid spacing, making grid-based
+    placement produce unavoidable inter-chain clashes.
+
+    Args:
+        chain_coords:  List of (N_i, 3) centered chain coordinate arrays.
+        box:           Simulation box dimensions [Lx, Ly, Lz] in nm.
+        slab_width:    z-extent of the initial slab region (nm).
+                       Defaults to 0.6 * Lz.
+        clash_cutoff:  Minimum allowed inter-chain atom distance (nm).
+                       Default 0.7 nm, same as CALVADOS.
+        max_tries:     Maximum placement attempts per chain before giving up.
     """
+    try:
+        from MDAnalysis.analysis import distances as mda_dist
+        _has_mda = True
+    except ImportError:
+        _has_mda = False
+
     if slab_width is None:
-        slab_width = box[2] * 0.6  # Default: 60% of z box dimension
-    slab_box = [box[0], box[1], slab_width]
-    grid_pts = _build_xyzgrid(len(chain_coords), slab_box)
-    # shift to centre of z axis
-    grid_pts += np.array([0.0, 0.0, box[2] / 2.0 - slab_width / 2.0])
-    return _assemble_chains(chain_coords, grid_pts, box)
+        slab_width = box[2] * 0.6
+
+    z_lo = box[2] / 2.0 - slab_width / 2.0
+    z_hi = box[2] / 2.0 + slab_width / 2.0
+
+    # MDAnalysis box format: [Lx, Ly, Lz, alpha, beta, gamma] (degrees)
+    boxfull = np.array([box[0], box[1], box[2], 90.0, 90.0, 90.0], dtype=np.float32)
+
+    placed: List[np.ndarray] = []
+    rng = np.random.default_rng()
+
+    for cidx, chain in enumerate(chain_coords):
+        for ntry in range(max_tries):
+            # Random translation within slab z-region (CALVADOS: draw_starting_vec)
+            trans = np.array([
+                rng.uniform(0.0, box[0]),
+                rng.uniform(0.0, box[1]),
+                rng.uniform(z_lo, z_hi),
+            ])
+            candidate = chain + trans
+
+            # z-boundary check: all atoms must stay within [0, Lz]
+            # (x, y have PBC so no wall check needed there)
+            if candidate[:, 2].min() < 0.0 or candidate[:, 2].max() > box[2]:
+                continue
+
+            # PBC-aware clash check against already-placed atoms (CALVADOS: check_clash)
+            if placed:
+                xothers = np.vstack(placed).astype(np.float32)
+                cand_f  = candidate.astype(np.float32)
+                if _has_mda:
+                    d = mda_dist.distance_array(cand_f, xothers, boxfull)
+                else:
+                    # Fallback without MDAnalysis: naive PBC minimum-image distances
+                    diff = cand_f[:, None, :] - xothers[None, :, :]
+                    diff -= np.round(diff / boxfull[:3]) * boxfull[:3]
+                    d    = np.sqrt((diff ** 2).sum(axis=-1))
+                if d.min() < clash_cutoff:
+                    continue
+
+            placed.append(candidate)
+            break
+        else:
+            raise ValueError(
+                f"Failed to place chain {cidx} ({chain.shape[0]} atoms) "
+                f"after {max_tries} attempts. "
+                f"Try reducing nmol or increasing box / slab_width."
+            )
+
+    return np.vstack(placed)
 
 
 def place_chains_random(
@@ -206,7 +368,15 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
         seq = comp.get_sequence()
         for _mol_idx in range(comp.nmol):
             if comp.comp_type == ComponentType.MDP and comp.pdb_path:
-                coords, _ = build_mdp_chain(comp.pdb_path, use_com=use_com)
+                if comp.folded_domains:
+                    # Use PDB for the folded domain, compact builds for IDR tails.
+                    # Raw PDB IDR conformations from MD can span > 10 nm and cause
+                    # inter-chain clashes at the ~4 nm initial slab grid spacing.
+                    coords = build_mdp_chain_compact_idr(
+                        comp.pdb_path, comp.folded_domains, len(seq), use_com=use_com
+                    )
+                else:
+                    coords, _ = build_mdp_chain(comp.pdb_path, use_com=use_com)
             else:
                 coords = build_idp_chain(len(seq), method="compact")
             all_chains.append(coords)
@@ -240,6 +410,28 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+def _get_idr_segments(
+    n_res: int,
+    folded_domains: List[Tuple[int, int]],
+) -> List[Tuple[int, int]]:
+    """
+    Return IDR segment ranges as (start, end) tuples (0-indexed, end exclusive).
+
+    Example: n_res=193, folded_domains=[(22, 96)]
+      → [(0, 21), (96, 193)]
+    """
+    sorted_doms = sorted(folded_domains)
+    segments: List[Tuple[int, int]] = []
+    prev_end = 0
+    for dom_s, dom_e in sorted_doms:
+        if prev_end < dom_s - 1:
+            segments.append((prev_end, dom_s - 1))
+        prev_end = dom_e
+    if prev_end < n_res:
+        segments.append((prev_end, n_res))
+    return segments
+
 
 def _build_spiral(n: int, d: float = 0.38) -> np.ndarray:
     """Archimedean spiral in xy, linear in z."""

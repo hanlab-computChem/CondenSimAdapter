@@ -44,7 +44,10 @@ def _build_pdb2gmx_input(
     if his_type is not None:
         if his_type not in (0, 1):
             raise ValueError(f"his_type must be 0 or 1, got: {his_type}")
-        parts.append(f"{his_type}\n" * max(his_repeat_count, 1))
+        # Only append when there are actual HIS residues to answer for.
+        # his_repeat_count == 0 means no HIS in this PDB — emit nothing.
+        if his_repeat_count > 0:
+            parts.append(f"{his_type}\n" * his_repeat_count)
     return "".join(parts) if parts else None
 
 
@@ -308,8 +311,14 @@ def generate_all_atom_topology(
         else:
             raise ValueError(f"Unknown component type: {comp.comp_type}")
         
-        # Run pdb2gmx for topology (use "none" for water model)
+        # Run pdb2gmx for topology (use "none" for water model).
+        # When his_type is set, use the exact per-molecule HIS count so
+        # pdb2gmx receives the right number of stdin answers.
         comp_top_dir = output_dir / comp.name
+        if his_type is not None:
+            comp_his_repeat = count_his_for_component(comp, _log=False)
+        else:
+            comp_his_repeat = his_repeat_count
         comp_top_path = run_pdb2gmx_for_topology(
             input_pdb,
             comp_top_dir,
@@ -318,7 +327,7 @@ def generate_all_atom_topology(
             water_model="none",
             disable_disulfide=disable_disulfide,
             his_type=his_type,
-            his_repeat_count=his_repeat_count
+            his_repeat_count=comp_his_repeat
         )
         
         component_topologies.append({
@@ -427,6 +436,83 @@ def _seq_from_pdb(pdb_path: str) -> str:
         print(f"    Warning: Unknown residues found in PDB (will be marked as 'X'): {unknown_residues}")
     
     return one_letter_seq
+
+
+# =============================================================================
+# HIS Counting Utilities
+# =============================================================================
+
+# Residue names pdb2gmx treats as histidine and will prompt for when -his is set.
+_HIS_RESNAMES = frozenset({"HIS", "HSD", "HSE", "HSP"})
+
+
+def count_his_in_sequence(seq: str) -> int:
+    """Count histidine ('H') in a one-letter amino acid sequence string."""
+    if not seq:
+        return 0
+    return seq.upper().count("H")
+
+
+def count_his_in_pdb(pdb_path: str) -> int:
+    """
+    Count HIS/HSD/HSE/HSP residues in a PDB file (protein atoms only).
+
+    Uses the same residue-name set as the aa_map in _seq_from_pdb so the two
+    functions stay consistent.
+    """
+    import MDAnalysis as mda
+
+    universe = mda.Universe(str(pdb_path))
+    protein = universe.select_atoms("protein")
+    if len(protein) == 0:
+        return 0
+    return sum(1 for r in protein.residues if r.resname in _HIS_RESNAMES)
+
+
+def count_his_for_component(comp: CGComponent, *, _log: bool = True) -> int:
+    """
+    Per-molecule HIS count for one component.
+
+    Source priority (first available wins):
+      1. Inline ``sequence`` from YAML
+      2. ``ffasta`` file (BioPython via _read_fasta)
+      3. ``fpdb`` file (MDAnalysis via count_his_in_pdb)
+    """
+    if comp.sequence:
+        n = count_his_in_sequence(comp.sequence)
+        if _log:
+            print(f"    [{comp.name}] HIS count from YAML sequence: {n}")
+        return n
+    if comp.fasta_path:
+        seq = _read_fasta(comp.fasta_path, comp.name)
+        n = count_his_in_sequence(seq)
+        if _log:
+            print(f"    [{comp.name}] HIS count from FASTA: {n}")
+        return n
+    if comp.pdb_path:
+        n = count_his_in_pdb(comp.pdb_path)
+        if _log:
+            print(f"    [{comp.name}] HIS count from PDB: {n}")
+        return n
+    raise ValueError(
+        f"Component '{comp.name}': no sequence, ffasta, or fpdb available to count HIS"
+    )
+
+
+def count_total_his(components: List[CGComponent]) -> int:
+    """
+    Total number of HIS stdin selections pdb2gmx will prompt for across
+    the whole system (sum of per-molecule count * nmol for every component).
+
+    Logs a per-component line and a final total line.
+    """
+    total = 0
+    for c in components:
+        nmol = int(getattr(c, "nmol", 1))
+        per_mol = count_his_for_component(c, _log=True)
+        total += per_mol * nmol
+    print(f"  Total HIS selections for pdb2gmx (all copies): {total}")
+    return total
 
 
 # =============================================================================

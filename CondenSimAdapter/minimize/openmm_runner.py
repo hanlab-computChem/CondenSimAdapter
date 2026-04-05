@@ -112,7 +112,7 @@ def run_minimization(
     optimization_level: str = "medium",
     ff_type: str = "amber",
     ff_name: str = "amber99sb-ildn",
-    gb_model: str = "GBn2",
+    gb_model: str = "OBC2",
     salt_conc: float = 0.15,
     cutoff: float = 2.0,
     tolerance: float = 100.0,

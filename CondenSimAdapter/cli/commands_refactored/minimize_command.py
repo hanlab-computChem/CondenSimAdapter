@@ -45,6 +45,11 @@ def _ff_help() -> str:
 @click.option('--level', '-l', type=click.Choice(['high', 'medium', 'low']),
               default='medium', show_default=True,
               help='Softcore optimization level.')
+@click.option('--his-type', 'his_type', type=click.Choice(['0', '1']), default='1',
+              show_default=True,
+              help='Histidine protonation for pdb2gmx -his.  0 = HID (delta, neutral)  1 = HIE (epsilon, neutral).')
+@click.option('--no-disulfide', 'disable_disulfide', is_flag=True, default=False,
+              help='Pass -ss to pdb2gmx to disable disulfide-bond detection.')
 @click.option('--verbose', '-v', is_flag=True, default=False)
 def minimize_command(
     input_pdb: str,
@@ -56,6 +61,8 @@ def minimize_command(
     solvate: bool,
     salt_conc: float,
     level: str,
+    his_type: str,
+    disable_disulfide: bool,
     verbose: bool,
 ):
     """\b
@@ -75,10 +82,16 @@ def minimize_command(
         click.echo(f"Import error: {e}", err=True)
         sys.exit(1)
 
+    his_type_int = int(his_type)
+    his_label = {0: "HID (delta, neutral)", 1: "HIE (epsilon, neutral)"}.get(his_type_int, str(his_type_int))
+
     click.echo(f"\n{'=' * 60}\nEnergy Minimization\n{'=' * 60}")
     click.echo(f"  Input PDB:   {input_pdb}")
     click.echo(f"  Force field: {force_field}")
     click.echo(f"  Platform:    {platform} (GPU {gpu_id})")
+    click.echo(f"  HIS type:    {his_type_int} — {his_label}")
+    if disable_disulfide:
+        click.echo(f"  Disulfide:   disabled (-ss)")
 
     # Load components from YAML
     components = []
@@ -100,6 +113,8 @@ def minimize_command(
         gpu_id=gpu_id,
         solvate=solvate,
         ion_concentration=salt_conc,
+        his_type=his_type_int,
+        disable_disulfide=disable_disulfide,
     )
 
     sim = MinimizeSimulator(config=config, components=components, system_name=system_name)

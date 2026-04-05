@@ -57,7 +57,12 @@ _D_IDR  = 0.381    # nm  (IDR bond length)
 # ENM parameters for folded domains
 _ENM_K       = 8031.0   # kJ/mol/nm^2
 _ENM_CUTOFF  = 0.75     # nm
-_ENM_MIN_SEP = 1        # MPIPI uses no sequence separation (neighbors included)
+# min_seq_sep=2 avoids adding ENM bonds for consecutive pairs (i, i+1) that
+# already have a backbone harmonic bond from topology.py, preventing double-bonding.
+# The old OpenMpipi code used KDTree with no sequence separation (eff. min_sep=0)
+# but also did NOT add backbone bonds inside the folded domain; here backbone bonds
+# cover all consecutive pairs, so we skip them in ENM to match the physics.
+_ENM_MIN_SEP = 2
 
 
 class MpipiFF(CGForceField):
@@ -87,9 +92,15 @@ class MpipiFF(CGForceField):
         chain_meta: List[dict],
         temperature: float,
         ionic: float,
-        debye_length: float = 1.0,
+        debye_length: float = None,
     ) -> List[mm.Force]:
-        kappa = 1.0 / debye_length   # nm^-1; can be overridden by caller
+        if debye_length is not None:
+            kappa = 1.0 / debye_length   # nm^-1; explicit override
+        else:
+            # Compute inverse Debye length from temperature and ionic strength,
+            # matching the original OpenMpipi calculate_debye_length() formula.
+            from .base import debye_huckel_params
+            _, kappa = debye_huckel_params(temperature, ionic)
 
         # --- Wang-Frenkel short-range ---
         wf_str = (
@@ -168,13 +179,17 @@ class MpipiFF(CGForceField):
     ) -> mm.Force:
         """
         Elastic Network Model (ENM) for folded domains.
-        
-        MPIPI-specific implementation using original MPIPI parameters:
+
+        MPIPI-specific parameters:
         - k = 8031 kJ/mol/nm^2
         - cutoff = 0.75 nm
-        - min_seq_sep = 1 (no sequence separation, matching original behavior)
-        
-        Reference: Original MPIPI implementation uses KDTree without sequence separation.
+        - min_seq_sep = 2: skip consecutive pairs (i, i+1) because they already
+          have a backbone HarmonicBondForce from topology.py; adding them again
+          here would double the spring constant and distort the equilibrium.
+
+        The original OpenMpipi code (KDTree, min_sep=0) did NOT add backbone bonds
+        inside the folded domain; the new unified pipeline always adds backbone bonds
+        for all consecutive pairs, so we compensate with min_seq_sep=2.
         """
         from typing import Optional
         

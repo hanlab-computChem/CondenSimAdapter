@@ -41,7 +41,7 @@ class MinimizeConfig:
     forcefield_type: str = "1-a99SBdisp"
 
     # Implicit-solvent GB model used in stage 3
-    gb_model: str = "GBn2"                  # GBn2 | OBC2
+    gb_model: str = "OBC2"                  # OBC2 | GBn2 (OBC2 has better CUDA support)
 
     # Softcore schedule
     softcore_lambdas: List[float] = field(default_factory=lambda: [0.75, 0.85, 0.95])
@@ -59,7 +59,7 @@ class MinimizeConfig:
 
     # pdb2gmx options
     disable_disulfide: bool = False
-    his_type: Optional[int] = None         # 0 or 1 (None = interactive auto)
+    his_type: Optional[int] = 1            # 1 = HIE (default) | 0 = HID | None = skip -his
 
     # Solvation (explicit water)
     solvate: bool = False
@@ -158,9 +158,19 @@ class MinimizeSimulator:
             else:
                 log.warning(f"Force field folder not found for '{self.config.forcefield_type}'")
 
-            from .topology_builder import generate_all_atom_topology, merge_topologies
-            total_nmol = sum(getattr(c, "nmol", 1) for c in self.components)
-            his_repeat = max(total_nmol * 30, 30)
+            from .topology_builder import (
+                generate_all_atom_topology,
+                merge_topologies,
+                count_total_his,
+            )
+            # Compute the exact total number of HIS prompts pdb2gmx will emit
+            # for the full-system structure (all nmol copies of every component).
+            # When his_type is None pdb2gmx is run without -his so no stdin needed.
+            his_repeat = (
+                count_total_his(self.components)
+                if self.config.his_type is not None
+                else 0
+            )
 
             comp_tops, water_model = generate_all_atom_topology(
                 self.components,
@@ -209,6 +219,22 @@ class MinimizeSimulator:
                 final_pdb = str(root_pdb)
                 result.output_pdb = final_pdb
                 click.echo(f"  Minimization done  →  {root_pdb.name}")
+
+                # Generate plumed.dat for MDP components (contact map restraints)
+                try:
+                    from ..src.plumed_generator import generate_plumed_for_minimize
+                    plumed_generated = generate_plumed_for_minimize(
+                        components=self.components,
+                        topology_dir=topology_dir,
+                        output_file=str(out / "plumed.dat"),
+                        verbose=True,
+                    )
+                    if plumed_generated:
+                        click.echo(f"  plumed.dat generated  →  plumed.dat")
+                    else:
+                        click.echo(f"  No MDP components — skipping plumed.dat")
+                except Exception as _plumed_err:
+                    click.echo(f"  Warning: plumed.dat generation failed: {_plumed_err}")
 
                 # Step 4 — optional droplet box / solvation
                 if self.config.droplet_box_type:

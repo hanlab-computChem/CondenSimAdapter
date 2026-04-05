@@ -1,3 +1,14 @@
 {
-  "force_fields": []
+  "force_fields": [
+    {
+      "description": "",
+      "family": "AMBER",
+      "ff_dir": "/mnt/hdd1/home/tianxj/code/ms2main/CondenSimAdapter/CondenSimAdapter/forcefield/custom/amber03ws.ff",
+      "gbsa_mapping": "AMBER99SB-ILDN",
+      "id": "a1",
+      "pdb2gmx_name": "amber03ws",
+      "solvate_cs": "tip4p",
+      "water_model": "tip4p2005s"
+    }
+  ]
 }
