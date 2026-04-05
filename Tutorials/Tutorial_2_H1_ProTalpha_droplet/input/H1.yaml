@@ -39,7 +39,7 @@ simulation:
 components:
   - name: prota
     type: IDP          # IDP or MDP
-    nmol: 24          # number of molecules (can be adjusted per component)
+    nmol: 24           # number of molecules (can be adjusted per component)
     ffasta: prota.fasta
 
   - name: H1
@@ -47,9 +47,9 @@ components:
     nmol: 20           # number of molecules (can be adjusted per component)
     fpdb: H1.pdb
     # Domain definitions (required for MDP with restraints):
-    fdomains: |
+    fdomains:
       H1:
-      - [22, 96]
+        - [22, 96]
     restraint: true
-    restraint_type: harmonic  # harmonic | go
-    charge_termini: both  # both | n | c | none
+    restraint_type: harmonic
+    charge_termini: both

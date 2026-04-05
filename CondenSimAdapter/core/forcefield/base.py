@@ -24,6 +24,16 @@ class CGForceField(ABC):
     override `add_masses()`.
     """
 
+    # Whether ENM restraint pairs should be added to the exclusion list of all
+    # CustomNonbondedForce objects (VdW, electrostatics).
+    #
+    # - True (default): matches OpenMpipi (topology.addBond + createExclusionsFromBonds)
+    #   and CALVADOS (explicit add_exclusions for every restrained pair).
+    # - False: matches original COCOMO, which intentionally allows the 10-5 LJ to
+    #   act on ENM pairs (small attractive contribution at native distances deepens
+    #   the native-contact potential well).
+    _exclude_enm_from_nonbonded: bool = True
+
     @abstractmethod
     def create_nonbonded_forces(
         self,

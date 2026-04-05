@@ -45,7 +45,13 @@ def generate_plumed_for_minimize(
         Whether generation was successful (True if MDP components exist)
     """
     # 1. Check for MDP components
-    mdp_components = [comp for comp in components if comp.type == ComponentType.MDP]
+    # Support both new Component (comp_type) and legacy CGComponent (type)
+    def _get_comp_type(comp):
+        if hasattr(comp, 'comp_type'):
+            return comp.comp_type
+        return comp.type
+
+    mdp_components = [comp for comp in components if _get_comp_type(comp) == ComponentType.MDP]
     
     if not mdp_components:
         if verbose:
@@ -67,29 +73,30 @@ def generate_plumed_for_minimize(
     all_contactmaps = []  # List of (comp, copy_id, domain_id, domain_range, pairs)
     
     for comp in mdp_components:
-        # Skip if no fdomains
-        if not comp.fdomains:
-            if verbose:
-                print(f"  Warning: MDP component '{comp.name}' has no fdomains, skipping")
-            continue
-        
-        # Skip if no fpdb (shouldn't happen for MDP)
-        if not comp.fpdb:
-            if verbose:
-                print(f"  Warning: MDP component '{comp.name}' has no fpdb, skipping")
-            continue
-        
-        # Parse fdomains
-        try:
-            domains = _parse_fdomains(comp.fdomains)
-        except Exception as e:
-            if verbose:
-                print(f"  Error parsing fdomains for '{comp.name}': {e}")
-            continue
-        
+        # Resolve folded_domains: new Component uses folded_domains (List[Tuple]);
+        # legacy CGComponent uses fdomains (str/file path that needs parsing)
+        if hasattr(comp, 'folded_domains'):
+            domains = comp.folded_domains  # already List[Tuple[int, int]]
+        elif hasattr(comp, 'fdomains'):
+            try:
+                domains = _parse_fdomains(comp.fdomains)
+            except Exception as e:
+                if verbose:
+                    print(f"  Error parsing fdomains for '{comp.name}': {e}")
+                continue
+        else:
+            domains = []
+
         if not domains:
             if verbose:
                 print(f"  Warning: No domains found for '{comp.name}', skipping")
+            continue
+
+        # Resolve pdb_path: new Component uses pdb_path; legacy uses fpdb
+        pdb_path = getattr(comp, 'pdb_path', None) or getattr(comp, 'fpdb', None)
+        if not pdb_path:
+            if verbose:
+                print(f"  Warning: MDP component '{comp.name}' has no fpdb, skipping")
             continue
         
         if verbose:

@@ -137,8 +137,10 @@ class CGSimulation:
         simulation.context.setPositions(pos_qty)
 
         # 6. Energy minimise before production
+        # Use 10 000 iterations to handle large initial bond deviations that arise
+        # when MDP chains have compact IDR stubs displaced from the folded domain.
         log.info("Energy minimisation ...")
-        simulation.minimizeEnergy(maxIterations=2000)
+        simulation.minimizeEnergy(maxIterations=10000)
 
         # 7. Production MD
         xtc_file = str(out / f"{cfg.system_name}.xtc")
@@ -214,12 +216,17 @@ class CGSimulation:
             system.addForce(self.ff.build_angle_force(topology))
 
         # 5. ENM for folded domains
+        # Collect ENM pairs for exclusion from nonbonded forces, matching the
+        # original OpenMpipi behavior (topology.addBond for ENM → createExclusionsFromBonds)
+        # and CALVADOS behavior (add_exclusions called for every restrained pair).
         has_domains = any(meta["folded_domains"] for meta in chain_meta)
+        enm_pairs: list = []
         if has_domains:
             enm = self.ff.build_enm_bonds(positions, chain_meta,
                                            restraint_type="harmonic")
             if enm is not None:
                 system.addForce(enm)
+                enm_pairs = _extract_bond_pairs(enm)
 
         # 6. Non-bonded forces (force field specific)
         if isinstance(self.ff, CocomoFF):
@@ -234,6 +241,21 @@ class CGSimulation:
                 config.temperature, config.ionic_strength,
             )
         for f in nb_forces:
+            # Conditionally add ENM pair exclusions to every CustomNonbondedForce.
+            # - mpipi / calvados / hps: exclude ENM pairs (matching OpenMpipi which
+            #   adds all bonds to topology before createExclusionsFromBonds, and
+            #   CALVADOS which calls add_exclusions for every restrained pair).
+            # - cocomo: do NOT exclude ENM pairs (original COCOMO intentionally lets
+            #   the 10-5 LJ act on native contacts, adding a small attractive
+            #   contribution that deepens the native-contact potential well).
+            if (enm_pairs
+                    and self.ff._exclude_enm_from_nonbonded
+                    and isinstance(f, mm.CustomNonbondedForce)):
+                for i, j in enm_pairs:
+                    try:
+                        f.addExclusion(i, j)
+                    except Exception:
+                        pass   # pair already in exclusion list
             system.addForce(f)
 
         # 7. Droplet confinement
@@ -293,6 +315,27 @@ def _resolve_platform(
 # ---------------------------------------------------------------------------
 # PDB I/O helpers
 # ---------------------------------------------------------------------------
+
+def _extract_bond_pairs(force: mm.Force) -> list:
+    """
+    Extract (i, j) index pairs from a HarmonicBondForce or CustomBondForce.
+
+    Used to collect ENM bond pairs so they can be added as exclusions to
+    CustomNonbondedForce objects (WF, Yukawa) — matching both the original
+    OpenMpipi approach (topology.addBond + createExclusionsFromBonds) and
+    CALVADOS (explicit add_exclusions for every restrained pair).
+    """
+    pairs = []
+    if isinstance(force, mm.HarmonicBondForce):
+        for k in range(force.getNumBonds()):
+            p1, p2, *_ = force.getBondParameters(k)
+            pairs.append((int(p1), int(p2)))
+    elif isinstance(force, mm.CustomBondForce):
+        for k in range(force.getNumBonds()):
+            p1, p2, *_ = force.getBondParameters(k)
+            pairs.append((int(p1), int(p2)))
+    return pairs
+
 
 def _save_pdb(
     topology: app.Topology,
