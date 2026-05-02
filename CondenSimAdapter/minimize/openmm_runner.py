@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import gc
 import os
+import random
 import shutil
 from pathlib import Path
 
@@ -191,7 +192,7 @@ def run_minimization(
             add_implicit_solvent=False,
         )
         integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
-        integ.setRandomNumberSeed(0)
+        integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
         sim = Simulation(top.topology, system_gauss, integ, platform, properties)
         sim.context.setPositions(current_positions)
         sim.context.setPeriodicBoxVectors(*box_vectors)
@@ -220,7 +221,7 @@ def run_minimization(
                 soft_lambda=lam,
             )
             integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
-            integ.setRandomNumberSeed(0)
+            integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
             sim = Simulation(top.topology, system_sc, integ, platform, properties)
             sim.context.setPositions(current_positions)
             sim.context.setPeriodicBoxVectors(*box_vectors)
@@ -259,7 +260,7 @@ def run_minimization(
             )
 
         integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
-        integ.setRandomNumberSeed(0)
+        integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
         sim = Simulation(top.topology, system_final, integ, platform, properties)
         sim.context.setPositions(current_positions)
         sim.context.setPeriodicBoxVectors(*box_vectors)

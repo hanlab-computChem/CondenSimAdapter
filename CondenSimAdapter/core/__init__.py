@@ -11,9 +11,11 @@ Quick start:
     result = CGSimulation(config).run("FUS_LC_CG/")
 """
 
-from .config     import CGConfig, Component, ComponentType, TopologyType, SimulationResult
-from .simulation import CGSimulation
-from .forcefield import create_forcefield, list_forcefields
+from .config       import CGConfig, Component, ComponentType, TopologyType, SimulationResult
+from .simulation   import CGSimulation
+from .forcefield   import create_forcefield, list_forcefields
+from .entanglement import EntanglementAnalyzer, EntanglementReport
+from .z1plus       import Z1PlusWrapper, write_z1_format
 
 __all__ = [
     "CGConfig",
@@ -24,4 +26,8 @@ __all__ = [
     "CGSimulation",
     "create_forcefield",
     "list_forcefields",
+    "EntanglementAnalyzer",
+    "EntanglementReport",
+    "Z1PlusWrapper",
+    "write_z1_format",
 ]

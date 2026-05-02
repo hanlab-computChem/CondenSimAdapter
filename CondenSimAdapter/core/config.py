@@ -114,6 +114,13 @@ class CGConfig:
     droplet_radius: Optional[float] = None   # nm
     droplet_k: float = 1.0                   # kJ/mol/nm^2 (confinement spring)
 
+    # Entanglement check (runs after production MD on final.pdb)
+    check_entanglement: bool = True
+    # Absolute path to a locally installed Z1+ binary.  When set and executable,
+    # it takes priority over the built-in Z-code PPA.  Leave None to always use
+    # the built-in algorithm.
+    z1plus_executable: Optional[str] = None
+
     @property
     def n_molecules(self) -> int:
         return sum(c.nmol for c in self.components)
@@ -156,9 +163,11 @@ class CGConfig:
             temperature   = float(d.get("temperature", d.get("temp", 300.0))),
             ionic_strength= float(d.get("ionic_strength", d.get("ionic", 0.15))),
             simulation    = SimulationParams.from_dict(sim_raw),
-            slab_width    = float(d["slab_width"]) if "slab_width" in d else None,
-            droplet_radius= d.get("droplet_radius"),
-            droplet_k     = float(d.get("droplet_k", 1.0)),
+            slab_width          = float(d["slab_width"]) if "slab_width" in d else None,
+            droplet_radius      = d.get("droplet_radius"),
+            droplet_k           = float(d.get("droplet_k", 1.0)),
+            check_entanglement  = bool(d.get("check_entanglement", True)),
+            z1plus_executable   = d.get("z1plus_executable") or None,
         )
 
     @classmethod
@@ -177,6 +186,10 @@ class SimulationResult:
     log_file: Optional[str] = None
     error: Optional[str] = None
     elapsed_seconds: float = 0.0
+    # Entanglement check results (populated when check_entanglement=True)
+    entanglement_mean_z: Optional[float] = None
+    entanglement_max_z: Optional[float] = None
+    entanglement_method: Optional[str] = None   # "builtin" or "z1plus"
 
 
 # ---------------------------------------------------------------------------

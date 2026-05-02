@@ -220,23 +220,21 @@ def place_chains_slab(
     max_tries: int = 10_000,
 ) -> np.ndarray:
     """
-    Place chains randomly within a slab centred at z = Lz/2.
+    Randomly place chains within a slab centred at z = Lz/2, with PBC-aware
+    clash detection.
 
-    Adapted from CALVADOS build.random_placement (used for droplet topology),
-    extended here to restrict placement to the slab z-region and apply full
-    3-D PBC-aware clash detection via MDAnalysis distance_array.
-
-    This approach is necessary for MDP proteins where the folded domain + IDR
-    tails give a chain radius >> typical grid spacing, making grid-based
-    placement produce unavoidable inter-chain clashes.
+    NOTE: this function is NOT used by the default slab pipeline.  The default
+    path in build_all_chains uses the CALVADOS-style deterministic xyzgrid
+    placement (_build_xyzgrid + _assemble_chains), which is orders of magnitude
+    faster for large MDP chains.  This function is retained as a utility for
+    cases where a fully randomised (no-grid) initial configuration is needed.
 
     Args:
         chain_coords:  List of (N_i, 3) centered chain coordinate arrays.
         box:           Simulation box dimensions [Lx, Ly, Lz] in nm.
-        slab_width:    z-extent of the initial slab region (nm).
+        slab_width:    z-extent of the placement region (nm).
                        Defaults to 0.6 * Lz.
         clash_cutoff:  Minimum allowed inter-chain atom distance (nm).
-                       Default 0.7 nm, same as CALVADOS.
         max_tries:     Maximum placement attempts per chain before giving up.
     """
     try:
@@ -307,41 +305,57 @@ def place_chains_random(
     """
     Randomly place chains, rejecting positions that clash with existing beads.
 
-    Used for droplet topology (no periodic boundary during placement).
-    Mirrors the algorithm in CALVADOS build.random_placement().
+    Used for droplet topology.  Mirrors CALVADOS build.random_placement():
+    - check_walls: all atoms must lie within [0, box] (hard walls, no PBC wrapping)
+    - clash check: PBC-aware minimum-image distances via MDAnalysis distance_array,
+      matching CALVADOS build.check_clash behaviour.
     """
-    placed_positions: List[np.ndarray] = []
-    all_coords: List[np.ndarray] = []
+    try:
+        from MDAnalysis.analysis import distances as mda_dist
+        _has_mda = True
+    except ImportError:
+        _has_mda = False
 
-    for chain in chain_coords:
+    box_arr = np.array(box, dtype=float)
+    # MDAnalysis box format: [Lx, Ly, Lz, alpha, beta, gamma]
+    boxfull = np.array([box[0], box[1], box[2], 90.0, 90.0, 90.0], dtype=np.float32)
+
+    placed: List[np.ndarray] = []
+    rng = np.random.default_rng()
+
+    for cidx, chain in enumerate(chain_coords):
         for ntry in range(max_tries):
-            # random translation within full box (like draw_starting_vec)
-            trans = np.random.uniform(0, box, size=3)
+            # Random position within full box (CALVADOS: draw_starting_vec)
+            trans = rng.uniform(0.0, 1.0, size=3) * box_arr
             candidate = chain + trans
 
-            # check if outside box (like check_walls)
-            if np.min(candidate) < 0:
-                continue
-            if np.min(np.array(box) - candidate) < 0:
+            # Hard-wall check: all atoms must be inside [0, box] (CALVADOS: check_walls)
+            if candidate.min() < 0.0 or (box_arr - candidate).min() < 0.0:
                 continue
 
-            # clash check against already-placed beads (like check_clash)
-            if all_coords:
-                all_placed = np.vstack(all_coords)
-                diffs = candidate[:, None, :] - all_placed[None, :, :]
-                dists = np.sqrt((diffs ** 2).sum(axis=-1))
-                if dists.min() < clash_cutoff:
+            # PBC-aware clash check against already-placed atoms (CALVADOS: check_clash)
+            if placed:
+                xothers = np.vstack(placed).astype(np.float32)
+                cand_f  = candidate.astype(np.float32)
+                if _has_mda:
+                    d = mda_dist.distance_array(cand_f, xothers, boxfull)
+                else:
+                    diff = cand_f[:, None, :] - xothers[None, :, :]
+                    diff -= np.round(diff / boxfull[:3]) * boxfull[:3]
+                    d    = np.sqrt((diff ** 2).sum(axis=-1))
+                if d.min() < clash_cutoff:
                     continue
 
-            all_coords.append(candidate)
-            placed_positions.append(candidate)
+            placed.append(candidate)
             break
         else:
             raise ValueError(
-                f"Tried {max_tries}x to add molecule. Giving up."
+                f"Failed to place chain {cidx} ({chain.shape[0]} atoms) "
+                f"after {max_tries} attempts. "
+                f"Try reducing nmol or increasing box."
             )
 
-    return np.vstack(placed_positions)
+    return np.vstack(placed)
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +407,16 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
 
     # Assemble positions according to topology
     if config.topology == TopologyType.SLAB:
-        positions = place_chains_slab(all_chains, config.box, slab_width=config.slab_width)
+        # CALVADOS-style deterministic placement: build a 3-D grid over the slab
+        # volume and translate each chain to its grid point.  This mirrors CALVADOS
+        # sim.py (build_xyzgrid + grid_counter) and avoids the O(N²) random-
+        # placement + clash-detection loop that becomes prohibitively slow for large
+        # MDP chains.  Any residual inter-chain overlaps are resolved by the
+        # subsequent energy minimisation step.
+        slab_w = config.slab_width if config.slab_width is not None else config.box[2] * 0.6
+        grid_pts = _build_xyzgrid(len(all_chains), [config.box[0], config.box[1], slab_w])
+        grid_pts += np.array([0.0, 0.0, config.box[2] / 2.0 - slab_w / 2.0])
+        positions = _assemble_chains(all_chains, grid_pts, config.box)
     elif config.topology == TopologyType.DROPLET:
         r = config.droplet_radius or (min(config.box) * 0.4)
         droplet_box = [r * 2.0, r * 2.0, r * 2.0]

@@ -38,9 +38,11 @@ def _build_pdb2gmx_input(
     Returns:
         Combined input string or None if no interactive input is needed.
     """
+    # NOTE: pdb2gmx prompts in this order when both flags are used:
+    # 1. Histidine type selection (-his)
+    # 2. Disulfide bond selection (-ss)
+    # So we need to build the input in the same order.
     parts = []
-    if disable_disulfide:
-        parts.append(PDB2GMX_SS_NO_INPUT)
     if his_type is not None:
         if his_type not in (0, 1):
             raise ValueError(f"his_type must be 0 or 1, got: {his_type}")
@@ -48,6 +50,8 @@ def _build_pdb2gmx_input(
         # his_repeat_count == 0 means no HIS in this PDB — emit nothing.
         if his_repeat_count > 0:
             parts.append(f"{his_type}\n" * his_repeat_count)
+    if disable_disulfide:
+        parts.append(PDB2GMX_SS_NO_INPUT)
     return "".join(parts) if parts else None
 
 
