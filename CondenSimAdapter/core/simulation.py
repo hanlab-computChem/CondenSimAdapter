@@ -166,12 +166,18 @@ class CGSimulation:
         log.info(f"Starting MD: {sim_params.steps:,} steps ...")
         batch = max(sim_params.wfreq, 1000)
         n_batches = sim_params.steps // batch
+        remainder = sim_params.steps % batch
 
         with tqdm(total=sim_params.steps, unit="steps", smoothing=0.05) as pbar:
             for _ in range(n_batches):
                 simulation.step(batch)
                 simulation.saveCheckpoint(chk_file)
                 pbar.update(batch)
+
+            if remainder > 0:
+                simulation.step(remainder)
+                simulation.saveCheckpoint(chk_file)
+                pbar.update(remainder)
 
         # 8. Save final structure
         final_pdb = str(out / "final.pdb")

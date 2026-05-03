@@ -17,67 +17,33 @@ A workflow for CG and AA protein condensate simulation.
 """
 
 import sys
-import warnings
-import os
-
-# CRITICAL: Set up warning filters BEFORE any other imports
-# This must be done at the very beginning to catch warnings from all modules
-
-# Suppress all deprecation warnings globally
-warnings.filterwarnings('ignore', category=DeprecationWarning)
-
-# Suppress specific warnings from common simulation libraries
-warnings.filterwarnings('ignore', message='.*simtk\\.openmm.*')
-warnings.filterwarnings('ignore', message='.*xdrlib.*')
-warnings.filterwarnings('ignore', message='.*MDAnalysis.*')
-warnings.filterwarnings('ignore', message='.*Bio\\..*')
-warnings.filterwarnings('ignore', message='.*NumPy.*')
-warnings.filterwarnings('ignore', message='.*Pandas.*')
-
-# Suppress UserWarnings and FutureWarnings
-warnings.filterwarnings('ignore', category=FutureWarning)
-warnings.filterwarnings('ignore', category=UserWarning)
-warnings.filterwarnings('ignore', category=RuntimeWarning)
-
-# Also redirect stderr for any warnings that bypass the warning module
-_stderr_fileno = None
-try:
-    _stderr_fileno = sys.stderr.fileno()
-except (AttributeError, ValueError):
-    pass
-
-# Create a filter function for stderr
-class StderrWarningFilter:
-    """Filter out warning messages from stderr."""
-
-    def __init__(self):
-        self.original_stderr = sys.stderr
-
-    def write(self, text):
-        # Skip warning messages
-        if 'Warning:' in text or 'warning:' in text.lower():
-            return
-        if 'deprecated' in text.lower():
-            return
-        self.original_stderr.write(text)
-
-    def flush(self):
-        self.original_stderr.flush()
-
-    def fileno(self):
-        return self.original_stderr.fileno()
-
-    def isatty(self):
-        return self.original_stderr.isatty()
-
-# Only replace stderr if we're in a non-TTY context (to avoid issues in some environments)
-if _stderr_fileno is not None and not os.environ.get('FORCE_ADAPTER_STDERR', ''):
-    pass  # Keep original stderr in normal use
 
 import click
 
 from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command, to_run_command, forcefield_command
-from .commands_refactored.models_command import models_command
+
+
+class _LazyGroup(click.MultiCommand):
+    """Lazily load a Click group to avoid heavy imports at CLI startup."""
+
+    def __init__(self, import_path: str, **kwargs):
+        super().__init__(**kwargs)
+        self._import_path = import_path
+        self._loaded = None
+
+    def _load(self):
+        if self._loaded is None:
+            module_path, attr = self._import_path.rsplit(".", 1)
+            import importlib
+            mod = importlib.import_module(module_path)
+            self._loaded = getattr(mod, attr)
+        return self._loaded
+
+    def list_commands(self, ctx):
+        return self._load().list_commands(ctx)
+
+    def get_command(self, ctx, name):
+        return self._load().get_command(ctx, name)
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
@@ -138,7 +104,12 @@ main.add_command(forcefield_command, 'forcefield')
 main.add_command(init_command, 'init')
 main.add_command(droplet_density_command, 'droplet-density')
 main.add_command(info_command, 'info')
-main.add_command(models_command, 'models')
+_models_lazy = _LazyGroup(
+    "CondenSimAdapter.cli.commands_refactored.models_command.models_command",
+    name="models",
+    help="Manage neural network models for backmapping.",
+)
+main.add_command(_models_lazy, 'models')
 
 # Hidden/experimental commands
 pace_opt_command.hidden = True

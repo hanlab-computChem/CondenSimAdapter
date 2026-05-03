@@ -115,7 +115,7 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -W ignore"
+addopts = "-ra"
 markers = [
     "slow: long-running tests",
     "gpu: tests requiring GPU",

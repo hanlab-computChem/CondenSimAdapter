@@ -22,6 +22,7 @@ import logging
 import os
 import shutil
 import subprocess
+import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -266,9 +267,13 @@ class MinimizeSimulator:
                     result.solvated_top = str(root_solvated_top)
                     click.echo(f"  Solvation done  →  {root_solvated_gro.name}")
 
-        except Exception as exc:
-            import traceback
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+            log.error("Minimization workflow failed: %s", exc)
             result.errors.append(str(exc))
+            result.errors.append(traceback.format_exc())
+        except Exception as exc:
+            log.exception("Unexpected error during minimization")
+            result.errors.append(f"Unexpected error: {exc}")
             result.errors.append(traceback.format_exc())
 
         return result
@@ -345,8 +350,8 @@ class MinimizeSimulator:
                 ff_dest = solvate_dir / Path(ff_path).name
                 if not ff_dest.exists():
                     shutil.copytree(ff_path, ff_dest)
-        except Exception:
-            pass
+        except (OSError, shutil.Error) as exc:
+            log.warning("Could not copy force field to solvate directory: %s", exc)
 
         # Add ions — run grompp in solvate_dir so relative FF #includes resolve
         em_mdp = solvate_dir / "ions.mdp"

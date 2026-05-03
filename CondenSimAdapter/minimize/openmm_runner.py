@@ -11,7 +11,6 @@ worker.py is kept as a thin CLI wrapper around this function for standalone use.
 from __future__ import annotations
 
 import gc
-import os
 import random
 import shutil
 from pathlib import Path
@@ -161,124 +160,120 @@ def run_minimization(
     if str(input_top_path) != str(minimize_top):
         shutil.copy2(str(input_top_path), str(minimize_top))
 
-    original_cwd = os.getcwd()
-    os.chdir(output_path)
+    # ── Load structure ────────────────────────────────────────────────────
+    conf = GromacsGroFile(str(conf_gro))
+    gro_positions = conf.getPositions()
+    box_vectors   = conf.getPeriodicBoxVectors()
 
-    try:
-        # ── Load structure ────────────────────────────────────────────────────
-        conf = GromacsGroFile("conf.gro")
-        gro_positions = conf.getPositions()
-        box_vectors   = conf.getPeriodicBoxVectors()
+    # includeDir = parent of minimize/ (where the FF folder lives, e.g. a99SBdisp.ff/)
+    top = GromacsTopFileWithSoftcore(
+        str(minimize_top),
+        periodicBoxVectors=box_vectors,
+        includeDir=str(output_path.parent),
+        forcefield_type=ff_type.upper(),
+    )
 
-        # includeDir = parent of minimize/ (where the FF folder lives, e.g. a99SBdisp.ff/)
-        top = GromacsTopFileWithSoftcore(
-            "topol.top",
-            periodicBoxVectors=box_vectors,
-            includeDir=str(output_path.parent),
-            forcefield_type=ff_type.upper(),
-        )
+    # ── Platform selection ───────────────────────────────────────────────
+    platform, properties, platform_name = _select_platform(device, gpu_id)
 
-        # ── Platform selection ───────────────────────────────────────────────
-        platform, properties, platform_name = _select_platform(device, gpu_id)
+    current_positions = gro_positions
+    gb_constant = IMPLICIT_GBN2 if gb_model.upper() == "GBN2" else IMPLICIT_OBC2
 
-        current_positions = gro_positions
-        gb_constant = IMPLICIT_GBN2 if gb_model.upper() == "GBN2" else IMPLICIT_OBC2
+    # ── Stage 1: Gaussian repulsion ───────────────────────────────────────
+    system_gauss = top.createSystem(
+        nonbondedCutoff=cutoff * unit.nanometer,
+        nonbondedMethod=ff.CutoffPeriodic,
+        nonbonded_type=NONBONDED_GAUSSIAN,
+        add_implicit_solvent=False,
+    )
+    integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
+    integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
+    sim = Simulation(top.topology, system_gauss, integ, platform, properties)
+    sim.context.setPositions(current_positions)
+    sim.context.setPeriodicBoxVectors(*box_vectors)
+    sim.minimizeEnergy(maxIterations=max_iterations, tolerance=50.0)
 
-        # ── Stage 1: Gaussian repulsion ───────────────────────────────────────
-        system_gauss = top.createSystem(
+    state = sim.context.getState(getEnergy=True, getPositions=True, enforcePeriodicBox=True)
+    with open(output_path / "step1_gaussian.pdb", "w") as f:
+        PDBFile.writeFile(top.topology, state.getPositions(), f)
+    print("  Generated step1_gaussian.pdb", flush=True)
+    current_positions = state.getPositions()
+
+    del system_gauss, sim, state, integ
+    gc.collect()
+
+    # ── Stage 2: Softcore (progressive lambda) ────────────────────────────
+    lambda_values = _get_lambda_values(optimization_level)
+    add_implicit   = ff_type.upper() == "AMBER"
+
+    for step_num, lam in enumerate(lambda_values, 1):
+        system_sc = top.createSystem(
             nonbondedCutoff=cutoff * unit.nanometer,
             nonbondedMethod=ff.CutoffPeriodic,
-            nonbonded_type=NONBONDED_GAUSSIAN,
-            add_implicit_solvent=False,
+            nonbonded_type=NONBONDED_SOFTCORE,
+            add_implicit_solvent=add_implicit,
+            gb_model=gb_constant if add_implicit else None,
+            salt_conc=salt_conc,
+            soft_lambda=lam,
         )
         integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
         integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
-        sim = Simulation(top.topology, system_gauss, integ, platform, properties)
-        sim.context.setPositions(current_positions)
-        sim.context.setPeriodicBoxVectors(*box_vectors)
-        sim.minimizeEnergy(maxIterations=max_iterations, tolerance=50.0)
-
-        state = sim.context.getState(getEnergy=True, getPositions=True, enforcePeriodicBox=True)
-        PDBFile.writeFile(top.topology, state.getPositions(), open("step1_gaussian.pdb", "w"))
-        print("  Generated step1_gaussian.pdb", flush=True)
-        current_positions = state.getPositions()
-
-        del system_gauss, sim, state, integ
-        gc.collect()
-
-        # ── Stage 2: Softcore (progressive lambda) ────────────────────────────
-        lambda_values = _get_lambda_values(optimization_level)
-        add_implicit   = ff_type.upper() == "AMBER"
-
-        for step_num, lam in enumerate(lambda_values, 1):
-            system_sc = top.createSystem(
-                nonbondedCutoff=cutoff * unit.nanometer,
-                nonbondedMethod=ff.CutoffPeriodic,
-                nonbonded_type=NONBONDED_SOFTCORE,
-                add_implicit_solvent=add_implicit,
-                gb_model=gb_constant if add_implicit else None,
-                salt_conc=salt_conc,
-                soft_lambda=lam,
-            )
-            integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
-            integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
-            sim = Simulation(top.topology, system_sc, integ, platform, properties)
-            sim.context.setPositions(current_positions)
-            sim.context.setPeriodicBoxVectors(*box_vectors)
-            sim.minimizeEnergy(maxIterations=max_iterations, tolerance=tolerance)
-
-            state = sim.context.getState(getEnergy=True, getPositions=True, enforcePeriodicBox=True)
-            current_positions = state.getPositions()
-            out_pdb = f"step2_softcore_{step_num}.pdb"
-            PDBFile.writeFile(top.topology, current_positions, open(out_pdb, "w"))
-            print(f"  Generated {out_pdb} (lambda={lam})", flush=True)
-
-            del system_sc, sim, state, integ
-            gc.collect()
-
-        # ── Stage 3: Final minimization ───────────────────────────────────────
-        if ff_type.upper() == "CHARMM":
-            # CHARMM: GB forces are unreliable — use very-high-lambda softcore
-            final_lambda = 0.99999
-            print(f"  Using softcore final minimize (lambda={final_lambda}) for CHARMM", flush=True)
-            system_final = top.createSystem(
-                nonbondedCutoff=cutoff * unit.nanometer,
-                nonbondedMethod=ff.CutoffPeriodic,
-                nonbonded_type=NONBONDED_SOFTCORE,
-                add_implicit_solvent=False,
-                soft_lambda=final_lambda,
-            )
-        else:
-            # AMBER: standard potential with implicit solvent
-            system_final = top.createSystem(
-                nonbondedCutoff=cutoff * unit.nanometer,
-                nonbondedMethod=ff.CutoffPeriodic,
-                nonbonded_type=NONBONDED_STANDARD,
-                add_implicit_solvent=True,
-                gb_model=gb_constant,
-                salt_conc=salt_conc,
-            )
-
-        integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
-        integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
-        sim = Simulation(top.topology, system_final, integ, platform, properties)
+        sim = Simulation(top.topology, system_sc, integ, platform, properties)
         sim.context.setPositions(current_positions)
         sim.context.setPeriodicBoxVectors(*box_vectors)
         sim.minimizeEnergy(maxIterations=max_iterations, tolerance=tolerance)
 
         state = sim.context.getState(getEnergy=True, getPositions=True, enforcePeriodicBox=True)
-        PDBFile.writeFile(top.topology, state.getPositions(), open("final.pdb", "w"))
-        print("  Generated final.pdb", flush=True)
+        current_positions = state.getPositions()
+        out_pdb = f"step2_softcore_{step_num}.pdb"
+        with open(output_path / out_pdb, "w") as f:
+            PDBFile.writeFile(top.topology, current_positions, f)
+        print(f"  Generated {out_pdb} (lambda={lam})", flush=True)
 
-        del system_final, sim, state, integ
+        del system_sc, sim, state, integ
         gc.collect()
 
-        total_steps = 1 + len(lambda_values) + 1
-        step_info   = f"{optimization_level.capitalize()} ({total_steps} steps)"
-        print(f"  Optimization: {step_info}", flush=True)
-        print("\n  Done!", flush=True)
+    # ── Stage 3: Final minimization ───────────────────────────────────────
+    if ff_type.upper() == "CHARMM":
+        # CHARMM: GB forces are unreliable — use very-high-lambda softcore
+        final_lambda = 0.99999
+        print(f"  Using softcore final minimize (lambda={final_lambda}) for CHARMM", flush=True)
+        system_final = top.createSystem(
+            nonbondedCutoff=cutoff * unit.nanometer,
+            nonbondedMethod=ff.CutoffPeriodic,
+            nonbonded_type=NONBONDED_SOFTCORE,
+            add_implicit_solvent=False,
+            soft_lambda=final_lambda,
+        )
+    else:
+        # AMBER: standard potential with implicit solvent
+        system_final = top.createSystem(
+            nonbondedCutoff=cutoff * unit.nanometer,
+            nonbondedMethod=ff.CutoffPeriodic,
+            nonbonded_type=NONBONDED_STANDARD,
+            add_implicit_solvent=True,
+            gb_model=gb_constant,
+            salt_conc=salt_conc,
+        )
 
-        return {"step_info": step_info, "total_steps": total_steps}
+    integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
+    integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
+    sim = Simulation(top.topology, system_final, integ, platform, properties)
+    sim.context.setPositions(current_positions)
+    sim.context.setPeriodicBoxVectors(*box_vectors)
+    sim.minimizeEnergy(maxIterations=max_iterations, tolerance=tolerance)
 
-    finally:
-        os.chdir(original_cwd)
+    state = sim.context.getState(getEnergy=True, getPositions=True, enforcePeriodicBox=True)
+    with open(output_path / "final.pdb", "w") as f:
+        PDBFile.writeFile(top.topology, state.getPositions(), f)
+    print("  Generated final.pdb", flush=True)
+
+    del system_final, sim, state, integ
+    gc.collect()
+
+    total_steps = 1 + len(lambda_values) + 1
+    step_info   = f"{optimization_level.capitalize()} ({total_steps} steps)"
+    print(f"  Optimization: {step_info}", flush=True)
+    print("\n  Done!", flush=True)
+
+    return {"step_info": step_info, "total_steps": total_steps}
