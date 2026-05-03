@@ -12,6 +12,7 @@ This registry supports numbered selection:
 """
 
 import json
+import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -47,10 +48,31 @@ class ForceFieldInfo:
     ff_dir: Optional[str] = None  # Relative or absolute path to *.ff folder
 
 
-# User force field storage under source tree
-CUSTOM_FORCEFIELD_DIR = Path(__file__).parent / "custom"
-CUSTOM_FORCEFIELD_INDEX = Path(__file__).parent / "user_forcefields.json"
 CUSTOM_ID_PATTERN = re.compile(r"^a([1-9][0-9]*)$")
+
+# Old source-tree location (for migration)
+_OLD_CUSTOM_FORCEFIELD_DIR = Path(__file__).parent / "custom"
+_OLD_CUSTOM_FORCEFIELD_INDEX = Path(__file__).parent / "user_forcefields.json"
+
+
+def _get_user_data_dir() -> Path:
+    """Resolve user data directory for custom force fields.
+
+    Priority: CONDENSIMADAPTER_DATA_DIR env var > platformdirs > ~/.config/CondenSimAdapter
+    """
+    env_dir = os.environ.get("CONDENSIMADAPTER_DATA_DIR")
+    if env_dir:
+        return Path(env_dir)
+    try:
+        from platformdirs import user_data_dir
+        return Path(user_data_dir("CondenSimAdapter"))
+    except ImportError:
+        return Path.home() / ".config" / "CondenSimAdapter"
+
+
+_USER_DATA_DIR = _get_user_data_dir()
+CUSTOM_FORCEFIELD_DIR = _USER_DATA_DIR / "forcefields"
+CUSTOM_FORCEFIELD_INDEX = _USER_DATA_DIR / "user_forcefields.json"
 
 
 # =============================================================================
@@ -178,7 +200,9 @@ class ForceFieldRegistry:
         self._force_fields: Dict[str, ForceFieldInfo] = {}
         self._pdb2gmx_index: Dict[str, str] = {}  # Map pdb2gmx_name to CLI name
         self._custom_force_fields: Dict[str, ForceFieldInfo] = {}
-        
+
+        self._migrate_old_custom_forcefields()
+
         for ff in BUILTIN_FORCE_FIELDS:
             ff.source = "builtin"
             # Store CLI name (e.g., "1-a99SBdisp") in lowercase for case-insensitive lookup
@@ -190,6 +214,26 @@ class ForceFieldRegistry:
                 self._pdb2gmx_index["charmm36m"] = ff.name.lower()
 
         self._load_custom_force_fields()
+
+    def _migrate_old_custom_forcefields(self) -> None:
+        """Migrate custom force fields from old source-tree location to user data dir."""
+        if CUSTOM_FORCEFIELD_INDEX.exists():
+            return  # Already migrated or fresh install
+        if not _OLD_CUSTOM_FORCEFIELD_INDEX.exists():
+            return  # Nothing to migrate
+        try:
+            CUSTOM_FORCEFIELD_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(_OLD_CUSTOM_FORCEFIELD_INDEX, CUSTOM_FORCEFIELD_INDEX)
+            if _OLD_CUSTOM_FORCEFIELD_DIR.exists():
+                for item in _OLD_CUSTOM_FORCEFIELD_DIR.iterdir():
+                    dest = CUSTOM_FORCEFIELD_DIR / item.name
+                    if not dest.exists():
+                        if item.is_dir():
+                            shutil.copytree(item, dest)
+                        else:
+                            shutil.copy2(item, dest)
+        except OSError:
+            pass  # Migration is best-effort
 
     def _custom_id_key(self, ff_name: str) -> int:
         """Return numeric part for custom id sorting (a1, a2, ...)."""

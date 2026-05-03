@@ -13,6 +13,15 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
+def _parse_bool(value) -> bool:
+    """Parse a boolean value from YAML/dict, handling string 'false'/'no'/'0'."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() not in ("false", "no", "0", "off")
+    return bool(value)
+
+
 class ComponentType(Enum):
     IDP = "IDP"   # intrinsically disordered protein
     MDP = "MDP"   # multi-domain protein with folded regions
@@ -46,6 +55,14 @@ class Component:
 
     # Folded domains: list of (start, end) 1-based inclusive residue ranges
     folded_domains: List[Tuple[int, int]] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.nmol < 1:
+            raise ValueError(f"Component '{self.name}': nmol must be >= 1, got {self.nmol}")
+        if self.comp_type == ComponentType.MDP and not (self.pdb_path or self.sequence):
+            raise ValueError(
+                f"Component '{self.name}': MDP type requires pdb_path or sequence"
+            )
 
     def get_sequence(self) -> str:
         if self.sequence:
@@ -81,6 +98,16 @@ class SimulationParams:
     friction: float = 0.01        # ps^-1
     platform: str = "CUDA"
     gpu_id: int   = 0
+
+    def __post_init__(self):
+        if self.steps <= 0:
+            raise ValueError(f"simulation.steps must be > 0, got {self.steps}")
+        if self.dt <= 0:
+            raise ValueError(f"simulation.dt must be > 0, got {self.dt}")
+        if self.wfreq <= 0:
+            raise ValueError(f"simulation.wfreq must be > 0, got {self.wfreq}")
+        if self.friction < 0:
+            raise ValueError(f"simulation.friction must be >= 0, got {self.friction}")
 
     @classmethod
     def from_dict(cls, d: dict) -> SimulationParams:
@@ -120,6 +147,28 @@ class CGConfig:
     # it takes priority over the built-in Z-code PPA.  Leave None to always use
     # the built-in algorithm.
     z1plus_executable: Optional[str] = None
+
+    # Force field aliases accepted in addition to ForceField enum values
+    _FF_ALIASES = {"calvados"}
+
+    def __post_init__(self):
+        if len(self.box) != 3:
+            raise ValueError(f"box must have 3 elements [Lx, Ly, Lz], got {len(self.box)}")
+        if any(b <= 0 for b in self.box):
+            raise ValueError(f"box dimensions must be positive, got {self.box}")
+        if self.temperature <= 0:
+            raise ValueError(f"temperature must be > 0, got {self.temperature}")
+        if self.ionic_strength < 0:
+            raise ValueError(f"ionic_strength must be >= 0, got {self.ionic_strength}")
+        if not self.components:
+            raise ValueError("components list cannot be empty")
+        valid_ff = {e.value for e in ForceField} | self._FF_ALIASES
+        if self.force_field not in valid_ff:
+            raise ValueError(
+                f"force_field '{self.force_field}' not in {sorted(valid_ff)}"
+            )
+        if self.droplet_radius is not None and self.droplet_radius <= 0:
+            raise ValueError(f"droplet_radius must be > 0, got {self.droplet_radius}")
 
     @property
     def n_molecules(self) -> int:
@@ -166,7 +215,7 @@ class CGConfig:
             slab_width          = float(d["slab_width"]) if "slab_width" in d else None,
             droplet_radius      = d.get("droplet_radius"),
             droplet_k           = float(d.get("droplet_k", 1.0)),
-            check_entanglement  = bool(d.get("check_entanglement", True)),
+            check_entanglement  = _parse_bool(d.get("check_entanglement", True)),
             z1plus_executable   = d.get("z1plus_executable") or None,
         )
 

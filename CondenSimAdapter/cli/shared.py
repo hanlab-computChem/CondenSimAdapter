@@ -8,24 +8,6 @@ used across multiple CLI commands.
 
 import os
 import sys
-import warnings
-
-# CRITICAL: Set up warning filters BEFORE any other imports
-# Suppress all deprecation warnings globally
-warnings.filterwarnings('ignore', category=DeprecationWarning)
-
-# Suppress specific warnings from common simulation libraries
-warnings.filterwarnings('ignore', message='.*simtk\\.openmm.*')
-warnings.filterwarnings('ignore', message='.*xdrlib.*')
-warnings.filterwarnings('ignore', message='.*MDAnalysis.*')
-warnings.filterwarnings('ignore', message='.*Bio\\..*')
-warnings.filterwarnings('ignore', message='.*NumPy.*')
-warnings.filterwarnings('ignore', message='.*Pandas.*')
-
-# Suppress UserWarnings and FutureWarnings
-warnings.filterwarnings('ignore', category=FutureWarning)
-warnings.filterwarnings('ignore', category=UserWarning)
-warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 from pathlib import Path
 from typing import Optional, List
@@ -33,7 +15,6 @@ from typing import Optional, List
 import click
 
 from ..core.config import CGConfig as CGSimulationConfig, Component as CGComponent, ComponentType, TopologyType
-from ..minimize.minimizer import MinimizeSimulator, MinimizeConfig
 from ..forcefield.registry import REGISTRY, list_force_fields, BUILTIN_FORCE_FIELDS
 
 

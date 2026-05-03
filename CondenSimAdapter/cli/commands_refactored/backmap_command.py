@@ -7,7 +7,14 @@ from typing import Optional
 
 import click
 
-from ...backmap.backmapper import SUPPORTED_MODELS
+
+def _model_help() -> str:
+    """Lazily resolve SUPPORTED_MODELS for help text."""
+    try:
+        from ...backmap.backmapper import SUPPORTED_MODELS
+        return f'cg2all model type. Options: {", ".join(SUPPORTED_MODELS)}.'
+    except ImportError:
+        return 'cg2all model type (e.g. CalphaBasedModel).'
 
 
 @click.command('backmap', context_settings={'help_option_names': ['-h', '--help']})
@@ -23,7 +30,7 @@ from ...backmap.backmapper import SUPPORTED_MODELS
               help='Output directory (default: {system_name}_backmap).')
 @click.option('--model-type', '-m', type=str, default='CalphaBasedModel',
               show_default=True,
-              help=f'cg2all model type. Options: {", ".join(SUPPORTED_MODELS)}.')
+              help=_model_help())
 @click.option('--device', '-d', type=str, default='cpu', show_default=True,
               help='Compute device: cpu | cuda | cuda:0 etc.')
 @click.option('--verbose', '-v', is_flag=True, default=False)
