@@ -341,7 +341,7 @@ class TestPlaceChainsRandom:
         # Try to place many large chains in small box
         chains = [np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0]]) for _ in range(100)]
         box = [2.0, 2.0, 2.0]  # Too small
-        with pytest.raises(ValueError, match="Giving up"):
+        with pytest.raises(ValueError, match="Failed to place chain"):
             place_chains_random(chains, box, clash_cutoff=1.0, max_tries=100)
 
 

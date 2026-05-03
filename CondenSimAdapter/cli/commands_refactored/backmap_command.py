@@ -114,7 +114,13 @@ def backmap_command(
     click.echo(f"  Model type: {model_type}")
     click.echo(f"  Device:     {device}")
     if topology_type:
-        click.echo(f"  Topology:   {topology_type}  (slab z-centering enabled)")
+        topo_note = {
+            "slab": "z-centering enabled",
+            "droplet": "droplet centering enabled",
+            "cubic": "periodic boundary",
+        }.get(topology_type, "")
+        topo_str = f"  ({topo_note})" if topo_note else ""
+        click.echo(f"  Topology:   {topology_type}{topo_str}")
 
     out = output_dir or f"{system_name}_backmap"
 
