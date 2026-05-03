@@ -50,6 +50,10 @@ def _ff_help() -> str:
               help='Histidine protonation for pdb2gmx -his.  0 = HID (delta, neutral)  1 = HIE (epsilon, neutral).')
 @click.option('--no-disulfide', 'disable_disulfide', is_flag=True, default=False,
               help='Pass -ss to pdb2gmx to disable disulfide-bond detection.')
+@click.option('--box-type', '-bt', type=click.Choice(['dodecahedron', 'cubic', 'octahedron']),
+              default=None, help='Box shape for droplet solvation (gmx editconf -bt).')
+@click.option('--box-distance', '-dd', type=float, default=2.0, show_default=True,
+              help='Water shell thickness in nm (gmx editconf -d).')
 @click.option('--verbose', '-v', is_flag=True, default=False)
 def minimize_command(
     input_pdb: str,
@@ -63,6 +67,8 @@ def minimize_command(
     level: str,
     his_type: str,
     disable_disulfide: bool,
+    box_type: Optional[str],
+    box_distance: float,
     verbose: bool,
 ):
     """\b
@@ -72,7 +78,7 @@ def minimize_command(
     Examples:
         adapter minimize -f FUS_LC.yaml -i FUS_LC_backmap/backmapped.pdb -ff 1
         adapter minimize -f FUS_LC.yaml -i FUS_LC_backmap/backmapped.pdb -ff 1 --solvate
-        adapter minimize -f FUS_LC.yaml -i FUS_LC_backmap/backmapped.pdb -ff 9
+        adapter minimize -f FUS_LC.yaml -i FUS_LC_backmap/backmapped.pdb -ff 2 --solvate -bt dodecahedron -dd 2
     """
     try:
         from ...minimize.minimizer import MinimizeConfig, MinimizeSimulator
@@ -115,6 +121,8 @@ def minimize_command(
         ion_concentration=salt_conc,
         his_type=his_type_int,
         disable_disulfide=disable_disulfide,
+        droplet_box_type=box_type,
+        droplet_distance=box_distance,
     )
 
     sim = MinimizeSimulator(config=config, components=components, system_name=system_name)

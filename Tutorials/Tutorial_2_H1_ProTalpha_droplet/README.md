@@ -46,22 +46,48 @@ cd run
 
 ## Step 1: Initialize configuration with `adapter init`
 
-First, we use `adapter init` to generate the YAML template with experimental ionic strength and temperature. For this electrostatics‑dominated system, we choose the force field optimized for electrostatic interactions: **mpipi_recharged**.
+First, we use `adapter init` to generate the YAML template with experimental ionic strength and temperature. For this electrostatics‑dominated system, we choose the force field optimized for electrostatic interactions: **mpipi**.
 
 ```bash
-adapter init -ff mpipi_recharged --type mixed -n 1 1 -tp droplet -r 6 -t 100 -T 295 -I 0.12 --name H1_Prota
+adapter init -ff mpipi --type mixed -n 1 1 -tp droplet -r 6 -t 100 -T 295 -I 0.12 --name H1_Prota
+```
+
+Example `adapter init` output:
+
+```text
+============================================================
+Configuration template created successfully!
+============================================================
+
+  File: H1_Prota.yaml
+  System: H1_Prota
+  Force field: mpipi
+  Topology: droplet - Spherical droplet confined within radius r, surrounded by dilute phase
+  Radius: 6.0 nm
+  Temperature: 295.0 K
+  Ionic: 0.12 M
+  Time: 100.0 ns (10,000,000 steps)
+  Components: 2 (IDP (requires FASTA file), MDP (requires PDB file))
+  Molecules per component: 1
+
+  Next steps:
+    1. Edit H1_Prota.yaml (especially fdomains for MDP components)
+    2. Add your input files (FASTA/PDB) to 'input/' directory
+    3. Run: adapter cg -f H1_Prota.yaml [options]
+       (use 'adapter cg -h' to see available options)
 ```
 
 The generated YAML is:
 ```yaml
+# System information
 system_name: H1_Prota
 
 # CG force field
-force_field: mpipi_recharged   # calvados | hps_urry | cocomo | mpipi_recharged
+force_field: mpipi   # calvados | hps | cocomo | mpipi
 
 # Environment parameters
-radius: 6    # nm (droplet radius, box = [2*r, 2*r, 2*r])
-box: [12.0, 12.0, 12.0]   # nm (x, y, z)
+radius: 6.0   # nm (droplet radius, box = [2*r, 2*r, 2*r])
+box: [20.0, 20.0, 20.0]   # nm (x, y, z)
 temperature: 295.0         # Kelvin
 ionic: 0.12                # Molar (ionic strength)
 
@@ -75,7 +101,6 @@ topol: droplet
 simulation:
   steps: 10000000   # 100.0 ns (1 step = 10 fs)
   wfreq: 5000        # write frequency - save per 50 ps
-  verbose: true
 
 # Component definitions
 components:
@@ -89,10 +114,7 @@ components:
     nmol: 1           # number of molecules (can be adjusted per component)
     fpdb: input/protein_B.pdb
     # Domain definitions (required for MDP with restraints):
-    fdomains: |
-      protein_B:
-        - [1, 50]    # Domain 1: residues 1-50
-        - [51, 100]  # Domain 2: residues 51-100
+    fdomains: [[1, 50], [51, 100]]
 ```
 
 ## Step 2: Define components and MDP domains
@@ -112,9 +134,7 @@ components:
     nmol: 1           # number of molecules (can be adjusted per component)
     fpdb: ../input/H1.pdb
     # Domain definitions (required for MDP with restraints):
-    fdomains: |
-      H1:
-        - [22, 96]  
+    fdomains: [[22, 96]]
 ```
 
 ### MDP Class
@@ -215,6 +235,29 @@ Once the configuration is complete, similar to Tutorial 1, we execute the coarse
 adapter cg -f H1_Prota.yaml
 ```
 
+Example CG simulation output:
+
+```text
+============================================================
+CG Simulation
+============================================================
+  System:      H1_Prota
+  Force field: mpipi
+  Requested:   CUDA (GPU 0)
+  Platform:    CUDA:0
+  100%|██████████| 5000000/5000000 [03:00<00:00, 27708.23steps/s]
+
+[Entanglement check]  Method: built-in Z-code PPA
+  Chains analysed : 11
+  Mean Z          : 0.00
+  Max Z           : 0
+  Fraction Z > 0  : 0.0%
+  Verdict         : OK — No significant entanglement detected.
+
+  Completed. Output: H1_Prota_CG
+  Final PDB: H1_Prota_CG/final.pdb
+```
+
 This yields the final structure from the CG simulation:
 
 ![H1_cg](assets/H1_droplet.png)
@@ -228,7 +271,69 @@ Next, we proceed with the backmapping and minimization steps:
 ```bash
 adapter backmap -f H1_Prota.yaml
 
-adapter minimize -f H1_Prota.yaml -ff 2 --salt-conc 0.12 --solvate -bt dodecahedron -dd 2
+adapter minimize -f H1_Prota.yaml -i H1_Prota_backmap/backmapped.pdb -ff 2 --salt-conc 0.12 --solvate -bt dodecahedron -dd 2
+```
+
+Example backmap output:
+
+```text
+No -i given; trying default: H1_Prota_CG/
+
+============================================================
+Backmapping
+============================================================
+  Input:      /path/to/H1_Prota_CG/final.pdb
+  Model type: CalphaBasedModel
+  Device:     cpu
+  Topology:   droplet  (droplet centering enabled)
+Loading checkpoint from: .../CalphaBasedModel-FIX.ckpt
+
+  Completed. Output PDB: H1_Prota_backmap/backmapped.pdb
+```
+
+Example minimize output with droplet box options:
+
+```text
+============================================================
+Energy Minimization
+============================================================
+  Input PDB:   H1_Prota_backmap/backmapped.pdb
+  Force field: 2-amber03wsc
+  Platform:    CUDA (GPU 0)
+  HIS type:    1 — HIE (epsilon, neutral)
+  System:      H1_Prota (2 component types)
+
+  [1/4] Building GROMACS topology (amber03wsc) ...
+    [prota] HIS count from FASTA: 0
+    [H1] HIS count from PDB: 2
+  Total HIS selections for pdb2gmx (all copies): 10
+  [prota] IDP  112 residues
+    PCcli generated: prota_pccli.pdb
+  [H1] MDP  H1.pdb
+  [2/4] Processing input structure ...
+  [3/4] OpenMM softcore minimization (3 stages) ...
+  [platform] Using CUDA
+  Generated step1_gaussian.pdb
+  Generated step2_softcore_1.pdb (lambda=0.75)
+  Generated step2_softcore_2.pdb (lambda=0.85)
+  Generated step2_softcore_3.pdb (lambda=0.95)
+  Generated final.pdb
+  Optimization: Medium (5 steps)
+
+  Done!
+  Minimization done  →  minimize_final.pdb
+  Found 1 MDP component(s)
+  Component 'H1': 1 domain(s), 5 copy(ies)
+    Domain 0: residues 22-96, 1439 contact pairs
+  Written plumed.dat to: .../H1_Prota_minimize/plumed.dat
+  Successfully generated plumed.dat with 5 CONTACTMAP(s)
+  plumed.dat generated  →  plumed.dat
+  [4/4] Building droplet box (dodecahedron) ...
+  Droplet box done  →  minimize_final_box.gro
+  [4/4] Explicit solvation (tip4p2005s, 0.12 M) ...
+  Solvation done  →  minimize_final_solvated.gro
+
+  Completed. Output PDB: .../H1_Prota_minimize/minimize_final_solvated.gro
 ```
 
 In the minimization command, we introduce two parameters specifically designed for droplet geometry: **`-bt`** and **`-dd`**.

@@ -118,7 +118,7 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
             click.echo(f"  ✗ Error: -n flag requires {n_components} values (one per component)")
             click.echo(f"    Found {n_components} component(s) in configuration:")
             for i, comp in enumerate(config.components):
-                click.echo(f"      {i+1}. {comp.name} ({comp.type.value})")
+                click.echo(f"      {i+1}. {comp.name} ({comp.comp_type.value})")
             click.echo(f"\n    You provided {n_provided} value(s): {nmol_values}")
             click.echo(f"    Please provide exactly {n_components} integer(s).")
             sys.exit(1)
@@ -198,15 +198,15 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
         sequence = None
         nres = 0
 
-        # Priority 1: comp.seq
-        if comp.seq:
-            sequence = comp.seq
+        # Priority 1: comp.sequence
+        if comp.sequence:
+            sequence = comp.sequence
             nres = len(sequence)
 
         # Priority 2: FASTA file
-        if not sequence and comp.ffasta:
+        if not sequence and comp.fasta_path:
             try:
-                fasta_path = Path(input_file).parent / comp.ffasta
+                fasta_path = Path(input_file).parent / comp.fasta_path
                 if fasta_path.exists():
                     with open(fasta_path, 'r') as f:
                         lines = f.readlines()
@@ -216,9 +216,9 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
                 pass
 
         # Priority 3: PDB file
-        if not sequence and comp.fpdb:
+        if not sequence and comp.pdb_path:
             try:
-                pdb_path = Path(input_file).parent / comp.fpdb
+                pdb_path = Path(input_file).parent / comp.pdb_path
                 if pdb_path.exists():
                     from Bio.PDB import PDBParser
                     from Bio.SeqUtils import seq1
@@ -236,9 +236,7 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
             except Exception:
                 pass
 
-        # Priority 4: comp.nres (if set and we don't have sequence yet)
-        if nres == 0 and comp.nres > 0:
-            nres = comp.nres
+        # Priority 4: comp.nres is no longer available on Component
 
         if nres == 0:
             click.echo(f"  ✗ Warning: Could not determine residue count for component '{comp.name}'")
@@ -264,7 +262,7 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
 
         component_details.append({
             'name': comp.name,
-            'type': comp.type.value,
+            'type': comp.comp_type.value,
             'nmol': current_nmol,
             'nmol_source': nmol_source[idx],
             'nres': nres,

@@ -20,20 +20,20 @@ MODEL_HOME = Path(__file__).parent
 # Model download URLs (GitHub Releases)
 # Replace with your actual release URLs after publishing
 MODEL_URLS: Dict[str, str] = {
-    "CalphaBasedModel.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v0.2.0/CalphaBasedModel.ckpt",
-    "CalphaBasedModel-FIX.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v0.2.0/CalphaBasedModel-FIX.ckpt",
-    "ResidueBasedModel.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v0.2.0/ResidueBasedModel.ckpt",
-    "Martini.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v0.2.0/Martini.ckpt",
-    "Martini3.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v0.2.0/Martini3.ckpt",
+    "CalphaBasedModel.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v1.0.0-beta/CalphaBasedModel.ckpt",
+    "CalphaBasedModel-FIX.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v1.0.0-beta/CalphaBasedModel-FIX.ckpt",
+    "ResidueBasedModel.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v1.0.0-beta/ResidueBasedModel.ckpt",
+    "Martini.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v1.0.0-beta/Martini.ckpt",
+    "Martini3.ckpt": "https://github.com/hanlab-computChem/CondenSimAdapter/releases/download/v1.0.0-beta/Martini3.ckpt",
 }
 
 # Expected file sizes (bytes) for verification
 MODEL_SIZES: Dict[str, int] = {
-    "CalphaBasedModel.ckpt": 43_000_000,      # ~43 MB
-    "CalphaBasedModel-FIX.ckpt": 43_000_000,  # ~43 MB
-    "ResidueBasedModel.ckpt": 43_000_000,     # ~43 MB
-    "Martini.ckpt": 30_000_000,               # ~30 MB
-    "Martini3.ckpt": 30_000_000,              # ~30 MB
+    "CalphaBasedModel.ckpt": 49_300_000,      # ~47 MB
+    "CalphaBasedModel-FIX.ckpt": 49_300_000,  # ~47 MB
+    "ResidueBasedModel.ckpt": 49_300_000,     # ~47 MB
+    "Martini.ckpt": 49_300_000,               # ~47 MB
+    "Martini3.ckpt": 49_300_000,              # ~47 MB
 }
 
 

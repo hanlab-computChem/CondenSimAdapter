@@ -30,7 +30,7 @@ class TestMinimizeConfigDefaults:
     def test_default_gb_model(self):
         """Test default GB model."""
         config = MinimizeConfig()
-        assert config.gb_model == "GBn2"
+        assert config.gb_model == "OBC2"
 
     def test_default_softcore_lambdas(self):
         """Test default softcore lambda schedule."""
