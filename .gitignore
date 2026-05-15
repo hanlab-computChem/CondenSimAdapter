@@ -18,6 +18,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.o
 .Python
 build/
 develop-eggs/
@@ -138,3 +139,6 @@ Tutorials/**/run/
 *.ckpt
 *.pth
 *.pt
+
+# Compiled legacy helper binaries
+CondenSimAdapter/legacy/pace_asm_top_builder/scripts/genpair/genPairPACE

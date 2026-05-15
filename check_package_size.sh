@@ -1,5 +1,8 @@
 #!/bin/bash
-# Check package size before publishing
+# Check package size before publishing.
+# Model checkpoints are downloaded at runtime and must not be included.
+
+set -euo pipefail
 
 echo "========================================"
 echo "Package Size Checker"
@@ -11,7 +14,12 @@ rm -rf build/ dist/ *.egg-info/
 
 # Build package
 echo "Building package..."
-python -m build
+BUILD_ARGS=()
+if [ "${CSA_BUILD_NO_ISOLATION:-0}" = "1" ]; then
+    BUILD_ARGS+=(--no-isolation)
+    BUILD_ARGS+=(--skip-dependency-check)
+fi
+python -m build "${BUILD_ARGS[@]}"
 
 echo ""
 echo "========================================"
@@ -19,8 +27,9 @@ echo "Package Sizes"
 echo "========================================"
 
 # Get sizes
-WHEEL=$(ls dist/*.whl 2>/dev/null | head -1)
-SDIST=$(ls dist/*.tar.gz 2>/dev/null | head -1)
+WHEEL=$(ls dist/*.whl 2>/dev/null | head -1 || true)
+SDIST=$(ls dist/*.tar.gz 2>/dev/null | head -1 || true)
+WHEEL_SIZE=0
 
 if [ -f "$WHEEL" ]; then
     WHEEL_SIZE=$(stat -c%s "$WHEEL")
@@ -43,6 +52,34 @@ if [ -f "$SDIST" ]; then
     SDIST_MB=$((SDIST_SIZE / 1024 / 1024))
     echo "Sdist: $SDIST"
     echo "Size: $SDIST_SIZE bytes ($SDIST_MB MB)"
+fi
+
+echo ""
+echo "========================================"
+echo "Package Contents"
+echo "========================================"
+
+if [ -f "$WHEEL" ]; then
+    BAD_WHEEL_CONTENT=$(python - "$WHEEL" << 'PY'
+import sys
+import zipfile
+
+bad_suffixes = (".ckpt", ".pt", ".pth", ".pyc", ".pyo", ".o")
+bad_names = []
+with zipfile.ZipFile(sys.argv[1]) as zf:
+    for name in zf.namelist():
+        base = name.rsplit("/", 1)[-1]
+        if name.endswith(bad_suffixes) or base == "genPairPACE" or "__pycache__" in name:
+            bad_names.append(name)
+print("\n".join(bad_names))
+PY
+)
+    if [ -n "$BAD_WHEEL_CONTENT" ]; then
+        echo "ERROR: Wheel contains generated or external model files:"
+        echo "$BAD_WHEEL_CONTENT"
+        exit 1
+    fi
+    echo "Wheel content check passed"
 fi
 
 echo ""
@@ -72,33 +109,9 @@ echo "Recommendations"
 echo "========================================"
 
 if [ -f "$WHEEL" ] && [ $WHEEL_SIZE -gt 104857600 ]; then
-    echo "1. Request PyPI size limit increase:"
-    echo "   https://github.com/pypi/support/issues/new?template=limit-request.md"
-    echo ""
-    echo "2. Use this template for the request:"
-    cat << 'EOF'
-
-**Project:** CondenSimAdapter  
-**Size of release:** ~200 MB  
-**Which indexes:** PyPI  
-
-**Description:**  
-CondenSimAdapter is a scientific software package for protein condensate simulations.  
-It includes neural network models (~189 MB) for CG-to-AA backmapping.  
-
-The large file size is necessary because:  
-1. Neural network checkpoint files are inherently large  
-2. Users expect a complete, working package out-of-the-box  
-3. External hosting adds complexity for academic users  
-
-The package is:  
-- Open source (GPL-3.0)  
-- Actively maintained  
-- Used by the computational chemistry/biology community  
-
-Please increase the size limit to 300 MB.  
-
-EOF
+    echo "ERROR: Wheel exceeds 100MB PyPI limit."
+    echo "Model checkpoints should be downloaded at runtime, not bundled."
+    exit 1
 else
-    echo "✓ Package size is acceptable for PyPI"
+    echo "Package size is acceptable for PyPI"
 fi

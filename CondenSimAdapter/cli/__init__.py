@@ -20,7 +20,35 @@ import sys
 
 import click
 
-from .commands import init_command, cg_command, backmap_command, pace_opt_command, minimize_command, info_command, droplet_density_command, to_run_command, forcefield_command
+
+class _LazyCommand(click.Command):
+    """Lazily load a Click command to avoid heavy imports at CLI startup."""
+
+    def __init__(self, import_path: str, **kwargs):
+        super().__init__(**kwargs)
+        self._import_path = import_path
+        self._loaded = None
+
+    def _load(self):
+        if self._loaded is None:
+            module_path, attr = self._import_path.rsplit(".", 1)
+            import importlib
+            mod = importlib.import_module(module_path)
+            self._loaded = getattr(mod, attr)
+        return self._loaded
+
+    def get_params(self, ctx):
+        return self._load().get_params(ctx)
+
+    def format_help(self, ctx, formatter):
+        return self._load().format_help(ctx, formatter)
+
+    def invoke(self, ctx):
+        ctx.command = self._load()
+        return ctx.command.invoke(ctx)
+
+    def shell_complete(self, ctx, incomplete):
+        return self._load().shell_complete(ctx, incomplete)
 
 
 class _LazyGroup(click.MultiCommand):
@@ -94,16 +122,48 @@ def main():
 
 # Add commands (ordered: core commands first, then utility commands)
 # Core commands
-main.add_command(cg_command, 'cg')
-main.add_command(backmap_command, 'backmap')
-main.add_command(minimize_command, 'minimize')
-main.add_command(to_run_command, 'to_run')
-main.add_command(forcefield_command, 'forcefield')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.cg_command.cg_command",
+    name="cg",
+    help="Run coarse-grained simulation.",
+), 'cg')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.backmap_command.backmap_command",
+    name="backmap",
+    help="Backmap CG structure to all-atom representation.",
+), 'backmap')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.minimize_command.minimize_command",
+    name="minimize",
+    help="Energy minimization with AMBER/CHARMM force fields.",
+), 'minimize')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.to_run_command.to_run_command",
+    name="to_run",
+    help="Generate production run scripts for minimize output.",
+), 'to_run')
+main.add_command(_LazyGroup(
+    "CondenSimAdapter.cli.commands_refactored.forcefield_command.forcefield_command",
+    name="forcefield",
+    help="Manage custom all-atom force fields.",
+), 'forcefield')
 
 # Utility commands
-main.add_command(init_command, 'init')
-main.add_command(droplet_density_command, 'droplet-density')
-main.add_command(info_command, 'info')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.init_command.init_command",
+    name="init",
+    help="Initialize a new configuration template.",
+), 'init')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.droplet_density_command.droplet_density_command",
+    name="droplet-density",
+    help="Estimate protein density in droplet geometry.",
+), 'droplet-density')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.info_command.info_command",
+    name="info",
+    help="Display system and environment information.",
+), 'info')
 _models_lazy = _LazyGroup(
     "CondenSimAdapter.cli.commands_refactored.models_command.models_command",
     name="models",
@@ -112,8 +172,11 @@ _models_lazy = _LazyGroup(
 main.add_command(_models_lazy, 'models')
 
 # Hidden/experimental commands
-pace_opt_command.hidden = True
-main.add_command(pace_opt_command, 'pace-opt')
+main.add_command(_LazyCommand(
+    "CondenSimAdapter.cli.commands_refactored.pace_opt_command.pace_opt_command",
+    name="pace-opt",
+    hidden=True,
+), 'pace-opt')
 
 
 def cli():
@@ -123,4 +186,3 @@ def cli():
 
 if __name__ == '__main__':
     cli()
-
