@@ -93,7 +93,16 @@ include = ["CondenSimAdapter*"]
 exclude = ["tests*", "docs*", "old_code*", "consisitency*", ".github*"]
 
 [tool.setuptools.exclude-package-data]
-CondenSimAdapter = ["**/__pycache__", "**/*.pyc", "**/*.pyo"]
+CondenSimAdapter = [
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/*.pyo",
+    "backmap/cg2all/model/*.ckpt",
+    "backmap/cg2all/model/*.pt",
+    "backmap/cg2all/model/*.pth",
+    "legacy/pace_asm_top_builder/scripts/genpair/*.o",
+    "legacy/pace_asm_top_builder/scripts/genpair/genPairPACE",
+]
 
 [tool.setuptools.package-data]
 CondenSimAdapter = [

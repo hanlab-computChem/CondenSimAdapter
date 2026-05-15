@@ -454,14 +454,12 @@ END
         positions, meta = build_all_chains(config)
         assert positions.shape == (9, 3)  # 3 chains * 3 beads
         assert len(meta) == 3
-        # All positions should be within the droplet region (centered in box)
-        # With droplet_radius=5 and box=[20,20,20], droplet box is [10,10,10]
-        # centered at [10,10,10], so positions should be in [5,15] range roughly
-        com = positions.mean(axis=0)
+        # The local droplet box is [0, 10] and must be shifted into [5, 15],
+        # centered around the actual simulation box center.
         box_center = np.array([10.0, 10.0, 10.0])
-        # Check that COM is reasonably close to center (allowing for random spread)
-        distance_from_center = np.linalg.norm(com - box_center)
-        assert distance_from_center < 10.0, f"COM too far from center: {com}"
+        assert positions.min() >= 5.0
+        assert positions.max() <= 15.0
+        assert np.all(np.abs(positions.mean(axis=0) - box_center) < 5.0)
 
     def test_multi_component_system(self):
         """Test building system with multiple different components."""

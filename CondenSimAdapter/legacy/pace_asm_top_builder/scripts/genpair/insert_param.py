@@ -1,5 +1,6 @@
 import sys
-f=open(sys.argv[1],"r")
+
+f = open(sys.argv[1], "r")
 
 for rl in f:
   if "exclusions" in rl:
@@ -26,34 +27,34 @@ for rl in f:
 
 f.close()
 
-print ';Adding',len(excl),'excls',len(pair),'pairs',len(imp),'imps'
+print(";Adding", len(excl), "excls", len(pair), "pairs", len(imp), "imps")
 
-f=open(sys.argv[2],"r")
+f = open(sys.argv[2], "r")
 
 for rl in f:
   if 'pairs' in rl:
     break
-  print rl[:-1]
+  print(rl[:-1])
 
-print "[ exclusions ]"
+print("[ exclusions ]")
 for i in excl:
-  print i
+  print(i)
 
-print rl[:-1]
+print(rl[:-1])
 
 for i in pair:
-  print i
+  print(i)
 
 for rl in f:
-  print rl[:-1]
+  print(rl[:-1])
   if "dihedrals" in rl:
     break
 
 for i in imp:
-  print i
+  print(i)
 
 for rl in f:
-  print rl,
+  print(rl, end="")
  
 
 f.close()

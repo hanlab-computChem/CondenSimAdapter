@@ -421,9 +421,11 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
         r = config.droplet_radius or (min(config.box) * 0.4)
         droplet_box = [r * 2.0, r * 2.0, r * 2.0]
         positions = place_chains_random(all_chains, droplet_box)
-        # centre in actual box
-        centre = np.array(config.box) / 2.0
-        positions += centre
+        # place_chains_random returns coordinates in the local [0, 2r] droplet
+        # box. Shift that local box so its centre coincides with the real box.
+        centre = np.array(config.box, dtype=float) / 2.0
+        local_centre = np.array(droplet_box, dtype=float) / 2.0
+        positions += centre - local_centre
     else:
         positions = place_chains_grid(all_chains, config.box)
 

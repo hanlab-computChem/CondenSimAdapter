@@ -117,7 +117,8 @@ twine upload dist/*
 - [ ] CHANGELOG.md updated
 - [ ] All tests passing: `pytest tests/ -v`
 - [ ] Package size checked: `bash check_package_size.sh`
-- [ ] If size > 100MB: PyPI limit increase requested
+- [ ] Wheel/sdist do not contain `.ckpt`, `.o`, `pyc`, `__pycache__`, or `genPairPACE`
+- [ ] If size > 100MB: fix packaging exclusions before release
 
 ### Build
 
@@ -136,8 +137,8 @@ twine upload dist/*
 
 - [ ] Package visible on https://pypi.org/project/CondenSimAdapter/
 - [ ] Installation works: `pip install CondenSimAdapter`
-- [ ] CLI works: `adapter --version`
-- [ ] Models included: `adapter models status`
+- [ ] CLI works: `adapter --help`
+- [ ] Models are not bundled; status/download commands work: `adapter models status`
 
 ### Announce
 

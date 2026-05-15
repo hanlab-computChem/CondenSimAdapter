@@ -1,0 +1,6 @@
+exclude CondenSimAdapter/backmap/cg2all/model/*.ckpt
+exclude CondenSimAdapter/backmap/cg2all/model/*.pt
+exclude CondenSimAdapter/backmap/cg2all/model/*.pth
+exclude CondenSimAdapter/legacy/pace_asm_top_builder/scripts/genpair/*.o
+exclude CondenSimAdapter/legacy/pace_asm_top_builder/scripts/genpair/genPairPACE
+global-exclude __pycache__ *.py[cod]
