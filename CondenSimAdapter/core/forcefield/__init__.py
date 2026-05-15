@@ -13,17 +13,17 @@ from typing import Dict, Type
 
 from .base import CGForceField
 from .calvados import CalvadosFF
-from .hps     import HPSFF
-from .cocomo  import CocomoFF
-from .mpipi   import MpipiFF
+from .cocomo import CocomoFF
+from .hps import HPSFF
+from .mpipi import MpipiFF
 
 _REGISTRY: Dict[str, Type[CGForceField]] = {
-    "calvados" : CalvadosFF,   # resolved to 2 or 3 by CGConfig.resolved_force_field
+    "calvados": CalvadosFF,  # resolved to 2 or 3 by CGConfig.resolved_force_field
     "calvados2": CalvadosFF,
     "calvados3": CalvadosFF,
-    "hps"      : HPSFF,
-    "cocomo"   : CocomoFF,
-    "mpipi"    : MpipiFF,
+    "hps": HPSFF,
+    "cocomo": CocomoFF,
+    "mpipi": MpipiFF,
 }
 
 
@@ -37,10 +37,7 @@ def create_forcefield(name: str) -> CGForceField:
     """
     key = name.lower().strip()
     if key not in _REGISTRY:
-        raise ValueError(
-            f"Unknown CG force field '{name}'. "
-            f"Available: {sorted(_REGISTRY)}"
-        )
+        raise ValueError(f"Unknown CG force field '{name}'. Available: {sorted(_REGISTRY)}")
     if key == "calvados3":
         return CalvadosFF(version=3)
     # both 'calvados' and 'calvados2' default to version 2

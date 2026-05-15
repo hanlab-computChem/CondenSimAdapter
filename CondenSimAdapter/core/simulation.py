@@ -10,8 +10,6 @@ the 3358-line cg.py.  All force fields go through the same pipeline:
 from __future__ import annotations
 
 import logging
-import os
-import shutil
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -24,13 +22,13 @@ from mdtraj.reporters import XTCReporter
 from tqdm import tqdm
 
 from .config import CGConfig, SimulationResult, TopologyType
-from .molecule import build_all_chains
-from .topology import build_topology, get_masses
+from .entanglement import EntanglementAnalyzer
 from .forcefield import create_forcefield
 from .forcefield.base import CGForceField
 from .forcefield.cocomo import CocomoFF
-from .entanglement import EntanglementAnalyzer
-from .z1plus import Z1PlusWrapper, write_z1_format
+from .molecule import build_all_chains
+from .topology import build_topology
+from .z1plus import Z1PlusWrapper
 
 log = logging.getLogger(__name__)
 
@@ -75,8 +73,7 @@ class CGSimulation:
         out = Path(output_dir)
         if out.exists() and not overwrite:
             raise FileExistsError(
-                f"Output directory '{out}' already exists. "
-                "Pass overwrite=True to proceed."
+                f"Output directory '{out}' already exists. Pass overwrite=True to proceed."
             )
         out.mkdir(parents=True, exist_ok=True)
 
@@ -132,10 +129,7 @@ class CGSimulation:
             sim_params.platform, gpu_id
         )
         print(f"  Platform:    {actual_platform}", flush=True)
-        simulation = app.Simulation(
-            topology, system, integrator,
-            openmm_platform, platform_props
-        )
+        simulation = app.Simulation(topology, system, integrator, openmm_platform, platform_props)
         simulation.context.setPositions(pos_qty)
 
         # 6. Energy minimise before production
@@ -241,8 +235,7 @@ class CGSimulation:
         has_domains = any(meta["folded_domains"] for meta in chain_meta)
         enm_pairs: list = []
         if has_domains:
-            enm = self.ff.build_enm_bonds(positions, chain_meta,
-                                           restraint_type="harmonic")
+            enm = self.ff.build_enm_bonds(positions, chain_meta, restraint_type="harmonic")
             if enm is not None:
                 system.addForce(enm)
                 enm_pairs = _extract_bond_pairs(enm)
@@ -250,14 +243,18 @@ class CGSimulation:
         # 6. Non-bonded forces (force field specific)
         if isinstance(self.ff, CocomoFF):
             nb_forces = self.ff.create_nonbonded_forces(
-                topology, chain_meta,
-                config.temperature, config.ionic_strength,
+                topology,
+                chain_meta,
+                config.temperature,
+                config.ionic_strength,
                 positions=positions,
             )
         else:
             nb_forces = self.ff.create_nonbonded_forces(
-                topology, chain_meta,
-                config.temperature, config.ionic_strength,
+                topology,
+                chain_meta,
+                config.temperature,
+                config.ionic_strength,
             )
         for f in nb_forces:
             # Conditionally add ENM pair exclusions to every CustomNonbondedForce.
@@ -267,14 +264,16 @@ class CGSimulation:
             # - cocomo: do NOT exclude ENM pairs (original COCOMO intentionally lets
             #   the 10-5 LJ act on native contacts, adding a small attractive
             #   contribution that deepens the native-contact potential well).
-            if (enm_pairs
-                    and self.ff._exclude_enm_from_nonbonded
-                    and isinstance(f, mm.CustomNonbondedForce)):
+            if (
+                enm_pairs
+                and self.ff._exclude_enm_from_nonbonded
+                and isinstance(f, mm.CustomNonbondedForce)
+            ):
                 for i, j in enm_pairs:
                     try:
                         f.addExclusion(i, j)
                     except Exception:
-                        pass   # pair already in exclusion list
+                        pass  # pair already in exclusion list
             system.addForce(f)
 
         # 7. Droplet confinement
@@ -292,6 +291,7 @@ class CGSimulation:
 # ---------------------------------------------------------------------------
 # Platform selection
 # ---------------------------------------------------------------------------
+
 
 def _resolve_platform(
     platform_name: str,
@@ -313,14 +313,14 @@ def _resolve_platform(
             plat = mm.Platform.getPlatformByName(plat_name_map[preferred])
             props = {"DeviceIndex": str(gpu_id), "Precision": "mixed"}
             # Real probe: create a tiny context to verify the GPU is accessible
-            _sys = mm.System(); _sys.addParticle(1.0)
+            _sys = mm.System()
+            _sys.addParticle(1.0)
             _ctx = mm.Context(_sys, mm.VerletIntegrator(0.001), plat, props)
             del _ctx, _sys
             return plat, props, f"{plat_name_map[preferred]}:{gpu_id}"
         except Exception as e:
             print(
-                f"  [warn] {preferred} GPU {gpu_id} unavailable ({e}); "
-                "falling back to CPU.",
+                f"  [warn] {preferred} GPU {gpu_id} unavailable ({e}); falling back to CPU.",
                 flush=True,
             )
 
@@ -334,6 +334,7 @@ def _resolve_platform(
 # ---------------------------------------------------------------------------
 # PDB I/O helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_bond_pairs(force: mm.Force) -> list:
     """
@@ -372,9 +373,7 @@ def _save_final_pdb(
     box: List[float],
     path: str,
 ) -> None:
-    state = simulation.context.getState(
-        getPositions=True, enforcePeriodicBox=True
-    )
+    state = simulation.context.getState(getPositions=True, enforcePeriodicBox=True)
     bx, by, bz = box
     state.getPositions(asNumpy=True)
     simulation.context.setPeriodicBoxVectors(
@@ -382,9 +381,7 @@ def _save_final_pdb(
         mm.Vec3(0, by, 0) * unit.nanometer,
         mm.Vec3(0, 0, bz) * unit.nanometer,
     )
-    state2 = simulation.context.getState(
-        getPositions=True, enforcePeriodicBox=True
-    )
+    state2 = simulation.context.getState(getPositions=True, enforcePeriodicBox=True)
     with open(path, "w") as f:
         app.PDBFile.writeFile(topology, state2.getPositions(), f)
 
@@ -398,8 +395,8 @@ def _save_final_pdb(
 #   built-in range: 1.4–6.9 ; Z1+ range: 1.1–6.3
 # Thresholds are calibrated on the built-in algorithm; when Z1+ is used the
 # values are ~1.4x lower (see plan for derivation).
-_ENT_THRESH_ELEVATED = 4.0   # exceeds most IDP baselines
-_ENT_THRESH_HIGH     = 7.0   # exceeds all benchmark systems → likely artifact
+_ENT_THRESH_ELEVATED = 4.0  # exceeds most IDP baselines
+_ENT_THRESH_HIGH = 7.0  # exceeds all benchmark systems → likely artifact
 
 
 def _load_pdb_for_entanglement(
@@ -479,32 +476,31 @@ def _check_entanglement(
             method = "z1plus"
         else:
             log.warning(
-                "z1plus_executable '%s' is not executable; "
-                "falling back to built-in Z-code PPA.",
+                "z1plus_executable '%s' is not executable; falling back to built-in Z-code PPA.",
                 cfg.z1plus_executable,
             )
 
     if use_z1plus:
         result = wrapper.run(positions, boundaries, box_ang.tolist())
         z_values = result["z_values"]
-        mean_z   = float(result["mean_z"])
-        max_z    = float(result["max_z"])
+        mean_z = float(result["mean_z"])
+        max_z = float(result["max_z"])
         method_label = "Z1+"
     else:
         analyzer = EntanglementAnalyzer(positions, boundaries, box_ang, use_pbc=True)
-        report   = analyzer.run(max_iter=100)
+        report = analyzer.run(max_iter=100)
         z_values = report.z_values
-        mean_z   = float(report.mean_z)
-        max_z    = float(report.max_z)
+        mean_z = float(report.mean_z)
+        max_z = float(report.max_z)
         method_label = "built-in Z-code PPA"
 
-    n_entangled  = int(np.sum(z_values > 0))
+    n_entangled = int(np.sum(z_values > 0))
     frac_entangled = 100.0 * n_entangled / max(n_chains, 1)
 
     stats = {
-        "mean_z":   mean_z,
-        "max_z":    max_z,
-        "method":   method,
+        "mean_z": mean_z,
+        "max_z": max_z,
+        "method": method,
         "z_values": z_values,
         "n_chains": n_chains,
     }
@@ -537,31 +533,30 @@ def _log_entanglement_verdict(stats: dict) -> None:
 
     if mean_z <= 0.5:
         verdict = "OK"
-        detail  = "No significant entanglement detected."
+        detail = "No significant entanglement detected."
         log.info("[Entanglement] %s  mean Z = %.2f", verdict, mean_z)
         print(f"  Verdict         : {verdict} — {detail}")
 
     elif mean_z <= _ENT_THRESH_ELEVATED:
         verdict = "NORMAL"
-        detail  = "Within the expected range for condensate simulations."
+        detail = "Within the expected range for condensate simulations."
         log.info("[Entanglement] %s  mean Z = %.2f", verdict, mean_z)
         print(f"  Verdict         : {verdict} — {detail}")
 
     elif mean_z <= _ENT_THRESH_HIGH:
         verdict = "ELEVATED"
-        detail  = (
+        detail = (
             f"Mean Z ({mean_z:.2f}) is moderately high.  For IDP-only systems this "
             "may indicate topology artifacts; for MDP systems with long IDRs it can "
             "be physically expected.  Consider inspecting the structure if unexpected."
         )
         msg = f"[Entanglement] {verdict} — {detail}"
         log.warning(msg)
-        print(f"  Verdict         : *** {verdict} ***\n"
-              f"                    {detail}")
+        print(f"  Verdict         : *** {verdict} ***\n                    {detail}")
 
     else:
         verdict = "HIGH"
-        detail  = (
+        detail = (
             f"Mean Z ({mean_z:.2f}) exceeds the range observed in all 32 benchmark "
             "condensate systems (max: 6.9 built-in / 6.3 Z1+).  Possible causes:\n"
             "                      - Chains threading through folded domains during IDR placement\n"
@@ -574,5 +569,7 @@ def _log_entanglement_verdict(stats: dict) -> None:
         )
         msg = f"[Entanglement] {verdict} — mean Z = {mean_z:.2f}"
         log.warning(msg)
-        print(f"  Verdict         : *** WARNING: {verdict} ENTANGLEMENT ***\n"
-              f"                    {detail}")
+        print(
+            f"  Verdict         : *** WARNING: {verdict} ENTANGLEMENT ***\n"
+            f"                    {detail}"
+        )

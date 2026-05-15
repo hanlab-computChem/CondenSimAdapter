@@ -6,33 +6,30 @@ Contains common constants, validation functions, and helper utilities
 used across multiple CLI commands.
 """
 
-import os
-import sys
-
-from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 import click
 
-from ..core.config import CGConfig as CGSimulationConfig, Component as CGComponent, ComponentType, TopologyType
-from ..forcefield.registry import REGISTRY, list_force_fields, BUILTIN_FORCE_FIELDS
-
+from ..core.config import CGConfig as CGSimulationConfig
+from ..forcefield.registry import BUILTIN_FORCE_FIELDS, REGISTRY, list_force_fields
 
 # Canonical CLI force field names (version-specific selection is done automatically by the backend)
-CG_FORCE_FIELDS = ['calvados', 'hps', 'cocomo', 'mpipi']
+CG_FORCE_FIELDS = ["calvados", "hps", "cocomo", "mpipi"]
 
 # Legacy aliases accepted on the CLI for backwards compatibility;
 # calvados2/3 both resolve to 'calvados' -- the backend picks the version
 CG_FF_ALIASES = {
-    'calvados2'      : 'calvados',
-    'calvados3'      : 'calvados',
-    'hps_urry'       : 'hps',
-    'mpipi_recharged': 'mpipi',
+    "calvados2": "calvados",
+    "calvados3": "calvados",
+    "hps_urry": "hps",
+    "mpipi_recharged": "mpipi",
 }
+
 
 def normalize_cg_ff(name: str) -> str:
     """Resolve legacy / alternate CG force field names to canonical core names."""
     return CG_FF_ALIASES.get(name.lower(), name.lower())
+
 
 # Keep FORCE_FIELD_TO_RUNNER for any code that still references it
 FORCE_FIELD_TO_RUNNER = {ff: ff for ff in CG_FORCE_FIELDS}
@@ -40,17 +37,17 @@ FORCE_FIELD_TO_RUNNER.update(CG_FF_ALIASES)
 
 # Geometry defaults for init command
 GEOMETRY_DEFAULTS = {
-    'grid': {
-        'box': [20.0, 20.0, 20.0],
-        'description': 'Continuous dense phase with periodic boundaries in x, y, z',
+    "grid": {
+        "box": [20.0, 20.0, 20.0],
+        "description": "Continuous dense phase with periodic boundaries in x, y, z",
     },
-    'slab': {
-        'box': [10.0, 10.0, 40.0],
-        'description': 'Slab geometry with periodic boundaries in x, y and interfaces with dilute phase along z',
+    "slab": {
+        "box": [10.0, 10.0, 40.0],
+        "description": "Slab geometry with periodic boundaries in x, y and interfaces with dilute phase along z",
     },
-    'droplet': {
-        'box': [15.0, 15.0, 15.0],  # default radius
-        'description': 'Spherical droplet confined within radius r, surrounded by dilute phase',
+    "droplet": {
+        "box": [15.0, 15.0, 15.0],  # default radius
+        "description": "Spherical droplet confined within radius r, surrounded by dilute phase",
     },
 }
 
@@ -78,7 +75,7 @@ def get_minimize_force_fields() -> List[str]:
 
 def validate_minimize_force_field(ctx, param, value):
     """Validate minimize force field name using registry.
-    
+
     Supports:
     - Short number: "1", "2", etc. (converts to CLI name format)
     - Custom short id: "a1", "a2", etc.
@@ -93,15 +90,15 @@ def validate_minimize_force_field(ctx, param, value):
                 if ff.name.startswith(f"{value}-"):
                     return ff.name
             # Number not found, will fail validation below
-        
+
         is_valid, message = REGISTRY.validate(value)
         if not is_valid:
             raise click.BadParameter(message)
-        
+
         # Return the canonical CLI name (e.g., "1-a99SBdisp")
         ff = REGISTRY.get_force_field(value)
         return ff.name if ff else value
-    return '7-amber99sb-ildn'  # Default: amber99sb-ildn
+    return "7-amber99sb-ildn"  # Default: amber99sb-ildn
 
 
 def parse_component_pattern(pattern: str, nmol: int) -> List[dict]:
@@ -109,35 +106,37 @@ def parse_component_pattern(pattern: str, nmol: int) -> List[dict]:
     components = []
     idp_count = 0
     mdp_count = 0
-    
+
     for char in pattern.upper():
-        if char == 'I':
+        if char == "I":
             idp_count += 1
             comp = {
-                'name': f'IDP_{idp_count}',
-                'type': 'IDP',
-                'nmol': nmol,
-                'ffasta': f'input/IDP_{idp_count}.fasta',
+                "name": f"IDP_{idp_count}",
+                "type": "IDP",
+                "nmol": nmol,
+                "ffasta": f"input/IDP_{idp_count}.fasta",
             }
             components.append(comp)
-        elif char == 'M':
+        elif char == "M":
             mdp_count += 1
             comp = {
-                'name': f'MDP_{mdp_count}',
-                'type': 'MDP',
-                'nmol': nmol,
-                'fpdb': f'input/MDP_{mdp_count}.pdb',
-                'restraint': True,
-                'restraint_type': 'harmonic',
-                'charge_termini': 'both',
+                "name": f"MDP_{mdp_count}",
+                "type": "MDP",
+                "nmol": nmol,
+                "fpdb": f"input/MDP_{mdp_count}.pdb",
+                "restraint": True,
+                "restraint_type": "harmonic",
+                "charge_termini": "both",
             }
             components.append(comp)
         else:
-            raise ValueError(f"Invalid character '{char}' in component pattern. Use 'I' for IDP, 'M' for MDP.")
-    
+            raise ValueError(
+                f"Invalid character '{char}' in component pattern. Use 'I' for IDP, 'M' for MDP."
+            )
+
     if not components:
         raise ValueError("Component pattern cannot be empty. Use 'I' for IDP, 'M' for MDP.")
-    
+
     return components
 
 
@@ -145,11 +144,11 @@ def parse_box(box_tuple: Optional[tuple], topol: str, default_box: List[float]) 
     """Parse box parameter (now accepts tuple from nargs=3)"""
     if box_tuple is None:
         return default_box
-    
+
     # Convert tuple to list
     values = list(box_tuple)
-    
-    if topol == 'droplet':
+
+    if topol == "droplet":
         # Droplet: use x value as radius for all dimensions
         return [values[0], values[0], values[0]]
     else:
@@ -157,13 +156,17 @@ def parse_box(box_tuple: Optional[tuple], topol: str, default_box: List[float]) 
         return values
 
 
-def generate_yaml_with_comments(config: 'CGSimulationConfig', topol: str, 
-                                  geom_description: str, time_ns: float, 
-                                  component_list: List[dict], force_field: str = 'calvados',
-                                  radius: Optional[float] = None) -> str:
+def generate_yaml_with_comments(
+    config: "CGSimulationConfig",
+    topol: str,
+    geom_description: str,
+    time_ns: float,
+    component_list: List[dict],
+    force_field: str = "calvados",
+    radius: Optional[float] = None,
+) -> str:
     """Generate YAML with detailed comments"""
-    import yaml
-    
+
     # Header comments
     lines = [
         "# CG Simulation Configuration",
@@ -180,7 +183,7 @@ def generate_yaml_with_comments(config: 'CGSimulationConfig', topol: str,
         "#   - slab: Periodic boundaries in x, y and interfaces with dilute phase along z",
         "#   - droplet: Spherical droplet confined within radius r, surrounded by dilute phase",
         "",
-        f"# System information",
+        "# System information",
         f"system_name: {config.system_name}",
         "",
         "# CG force field",
@@ -188,19 +191,23 @@ def generate_yaml_with_comments(config: 'CGSimulationConfig', topol: str,
         "",
         "# Environment parameters",
     ]
-    
+
     # Add radius for droplet geometry
-    if topol == 'droplet' and radius is not None:
+    if topol == "droplet" and radius is not None:
         lines.append(f"radius: {radius:.1f}   # nm (droplet radius, box = [2*r, 2*r, 2*r])")
-    
+
     lines.append(f"box: [{', '.join(f'{v:.1f}' for v in config.box)}]   # nm (x, y, z)")
     lines.append(f"temperature: {config.temperature}         # Kelvin")
     lines.append(f"ionic: {config.ionic_strength}                # Molar (ionic strength)")
     lines.append("")
     lines.append("# Topology type:")
     lines.append("#   - grid: Continuous dense phase with periodic boundaries in x, y, z.")
-    lines.append("#   - droplet: Spherical droplet confined within radius r, surrounded by dilute phase")
-    lines.append("#   - slab: Geometry with periodic boundaries in x, y and interfaces with dilute phase along z.")
+    lines.append(
+        "#   - droplet: Spherical droplet confined within radius r, surrounded by dilute phase"
+    )
+    lines.append(
+        "#   - slab: Geometry with periodic boundaries in x, y and interfaces with dilute phase along z."
+    )
     # CLI exposes 'grid' as the user-facing name; config/YAML uses 'cubic'
     _topol_yaml = "cubic" if topol == "grid" else topol
     lines.append(f"topol: {_topol_yaml}")
@@ -214,31 +221,35 @@ def generate_yaml_with_comments(config: 'CGSimulationConfig', topol: str,
     lines.append("# Detects chain threading artifacts using Z-code Primitive Path Analysis.")
     lines.append("# Set to false to skip (useful for quick test runs).")
     lines.append("check_entanglement: true")
-    lines.append("# Optional: path to a locally installed Z1+ binary (takes priority over built-in).")
+    lines.append(
+        "# Optional: path to a locally installed Z1+ binary (takes priority over built-in)."
+    )
     lines.append("# Leave commented out to use the built-in algorithm.")
     lines.append("# z1plus_executable: /path/to/Z1+")
     lines.append("")
     lines.append("# Component definitions")
     lines.append("components:")
-    
+
     # Add components with comments
     for i, comp in enumerate(component_list):
         if i > 0:
             lines.append("")
-        
-        comp_type = comp['type']
+
+        comp_type = comp["type"]
         lines.append(f"  - name: {comp['name']}")
         lines.append(f"    type: {comp_type}          # IDP or MDP")
-        lines.append(f"    nmol: {comp['nmol']}           # number of molecules (can be adjusted per component)")
-        
-        if comp_type == 'IDP':
+        lines.append(
+            f"    nmol: {comp['nmol']}           # number of molecules (can be adjusted per component)"
+        )
+
+        if comp_type == "IDP":
             lines.append(f"    ffasta: {comp['ffasta']}")
-        elif comp_type == 'MDP':
+        elif comp_type == "MDP":
             lines.append(f"    fpdb: {comp['fpdb']}")
             lines.append("    # Domain definitions (required for MDP with restraints):")
             lines.append("    fdomains: |")
             lines.append(f"      {comp['name']}:")
             lines.append("        - [1, 50]    # Domain 1: residues 1-50")
             lines.append("        - [51, 100]  # Domain 2: residues 51-100")
-    
-    return '\n'.join(lines) + '\n'
+
+    return "\n".join(lines) + "\n"

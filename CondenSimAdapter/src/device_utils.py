@@ -3,8 +3,7 @@
 Device utilities for GPU/CPU selection.
 """
 
-from typing import Optional, Dict, Tuple
-
+from typing import Dict, Optional, Tuple
 
 SUPPORTED_DEVICES = ("cpu", "cuda", "opencl")
 

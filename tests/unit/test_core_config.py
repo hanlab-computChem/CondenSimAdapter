@@ -10,24 +10,25 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-import yaml
 from pathlib import Path
 
+import pytest
+import yaml
+
 from CondenSimAdapter.core.config import (
+    CGConfig,
     Component,
     ComponentType,
-    CGConfig,
     SimulationParams,
     TopologyType,
-    _read_fasta,
     _parse_fdomains,
+    _read_fasta,
 )
-
 
 # =============================================================================
 # Component Tests
 # =============================================================================
+
 
 class TestComponent:
     """Tests for Component dataclass."""
@@ -78,7 +79,7 @@ class TestComponent:
         # Write test files
         fasta = tmp_path / "test.fasta"
         fasta.write_text(">Test\nSEQFROMFASTA\n")
-        
+
         # Direct sequence should be used first
         comp = Component(
             name="Test",
@@ -87,7 +88,7 @@ class TestComponent:
             fasta_path=str(fasta),
         )
         assert comp.get_sequence() == "DIRECT"
-        
+
         # Without sequence, fasta should be used
         comp2 = Component(
             name="Test",
@@ -107,6 +108,7 @@ class TestComponent:
 # Helper Function Tests
 # =============================================================================
 
+
 class TestReadFasta:
     """Tests for _read_fasta helper."""
 
@@ -114,10 +116,10 @@ class TestReadFasta:
         """Test reading a single sequence from FASTA."""
         fasta = tmp_path / "test.fasta"
         fasta.write_text(">Protein1\nAAAA\nBBBB\n>Protein2\nCCCC\n")
-        
+
         result = _read_fasta(str(fasta), "Protein1")
         assert result == "AAAABBBB"
-        
+
         result2 = _read_fasta(str(fasta), "Protein2")
         assert result2 == "CCCC"
 
@@ -125,7 +127,7 @@ class TestReadFasta:
         """Test reading first sequence when no name specified."""
         fasta = tmp_path / "test.fasta"
         fasta.write_text(">AnyName\nMYSEQUENCE\n")
-        
+
         result = _read_fasta(str(fasta))
         assert result == "MYSEQUENCE"
 
@@ -133,7 +135,7 @@ class TestReadFasta:
         """Test that missing sequence name raises ValueError."""
         fasta = tmp_path / "test.fasta"
         fasta.write_text(">Other\nSEQ\n")
-        
+
         with pytest.raises(ValueError, match="not found"):
             _read_fasta(str(fasta), "Missing")
 
@@ -176,6 +178,7 @@ class TestParseFdomains:
 # SimulationParams Tests
 # =============================================================================
 
+
 class TestSimulationParams:
     """Tests for SimulationParams dataclass."""
 
@@ -204,6 +207,7 @@ class TestSimulationParams:
 # =============================================================================
 # CGConfig Tests
 # =============================================================================
+
 
 class TestCGConfig:
     """Tests for CGConfig dataclass."""
@@ -346,7 +350,7 @@ class TestCGConfig:
         yaml_path = tmp_path / "config.yaml"
         with open(yaml_path, "w") as f:
             yaml.dump(config_data, f)
-        
+
         config = CGConfig.from_yaml(str(yaml_path))
         assert config.system_name == "yaml_test"
         assert config.force_field == "mpipi"

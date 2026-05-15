@@ -5,29 +5,29 @@ To Run Command
 Generate production run scripts for adapter minimize output using OpenMM or AMBER.
 """
 
-import sys
 import shutil
 from pathlib import Path
 
 import click
 
-GROMACS_INCLUDE_DIR = '/usr/local/gromacs/share/gromacs/top'
+GROMACS_INCLUDE_DIR = "/usr/local/gromacs/share/gromacs/top"
 
 
 def get_system_name_from_yaml(yaml_path: str) -> str:
     """Read system_name from YAML config file."""
     import yaml
+
     path = Path(yaml_path)
     if not path.exists():
         raise FileNotFoundError(f"YAML file not found: {yaml_path}")
 
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         config = yaml.safe_load(f)
 
-    if 'system_name' not in config:
+    if "system_name" not in config:
         raise KeyError(f"'system_name' field not found in YAML: {yaml_path}")
 
-    return config['system_name']
+    return config["system_name"]
 
 
 def detect_gro_file(minimize_dir: Path) -> tuple[str, str]:
@@ -63,13 +63,13 @@ def setup_production_folder(
     top_file = minimize_dir / "topol.top"
     if top_file.exists():
         shutil.copy2(top_file, production_dir / "topol.top")
-        click.echo(f"Copied: topol.top")
+        click.echo("Copied: topol.top")
     else:
         click.echo(f"Warning: topol.top not found in {minimize_dir}")
 
     # Copy .ff folders (force field directories)
     for item in minimize_dir.iterdir():
-        if item.is_dir() and item.name.endswith('.ff'):
+        if item.is_dir() and item.name.endswith(".ff"):
             dest = production_dir / item.name
             shutil.copytree(item, dest, dirs_exist_ok=True)
             print(f"Copied: {item.name}/")
@@ -260,10 +260,10 @@ if __name__ == '__main__':
 '''
 
     script_path = production_dir / "openmm_run.py"
-    with open(script_path, 'w') as f:
+    with open(script_path, "w") as f:
         f.write(script_content)
 
-    click.echo(f"Generated: openmm_run.py")
+    click.echo("Generated: openmm_run.py")
     click.echo(f"  - Total time: {TOTAL_TIME_NS} ns")
     click.echo(f"  - Trajectory interval: {TRAJ_INTERVAL_PS} ps ({traj_interval_steps} steps)")
     click.echo(f"  - Log interval: {LOG_INTERVAL_PS} ps ({log_interval_steps} steps)")
@@ -301,33 +301,38 @@ def generate_amber_script(
     structure.save(str(prmtop_path), overwrite=True)
     structure.save(str(inpcrd_path), overwrite=True)
 
-    click.echo(f"Generated: system.prmtop")
-    click.echo(f"Generated: system.inpcrd")
+    click.echo("Generated: system.prmtop")
+    click.echo("Generated: system.inpcrd")
 
-    click.echo(f"\n  Note: No .mdin file is generated.")
-    click.echo(f"  Please provide your own AMBER input file to run the simulation.")
-    click.echo(f"  Example: pmemd -O -i run.npt.mdin -c system.inpcrd -p system.prmtop -r restart.ncrst -x trajectory.nc")
+    click.echo("\n  Note: No .mdin file is generated.")
+    click.echo("  Please provide your own AMBER input file to run the simulation.")
+    click.echo(
+        "  Example: pmemd -O -i run.npt.mdin -c system.inpcrd -p system.prmtop -r restart.ncrst -x trajectory.nc"
+    )
 
 
-@click.command('to_run')
+@click.command("to_run")
 @click.option(
-    '--input-file', '-f',
+    "--input-file",
+    "-f",
     type=click.Path(exists=True),
     required=True,
-    help='Configuration YAML (same as CG stage)',
+    help="Configuration YAML (same as CG stage)",
 )
 @click.option(
-    '--engine', '-e',
-    type=click.Choice(['openmm', 'amber']),
-    default='openmm',
-    help='Simulation engine: openmm or amber',
+    "--engine",
+    "-e",
+    type=click.Choice(["openmm", "amber"]),
+    default="openmm",
+    help="Simulation engine: openmm or amber",
 )
 @click.option(
-    '--input', '-i',
+    "--input",
+    "-i",
     type=click.Path(),
     required=False,
     default=None,
-    help='Input: minimize output directory. Default: {system_name}_minimize',
+    help="Input: minimize output directory. Default: {system_name}_minimize",
 )
 def to_run_command(
     input_file,
@@ -365,7 +370,7 @@ def to_run_command(
     if not minimize_dir.exists():
         raise click.BadParameter(
             f'Minimize directory "{input}" does not exist. '
-            f'Run adapter minimize first or provide correct --input path.'
+            f"Run adapter minimize first or provide correct --input path."
         )
 
     # Determine output directory
@@ -392,24 +397,26 @@ def to_run_command(
     setup_production_folder(minimize_dir, production_dir, gro_name, gro_path)
 
     # Generate run script based on engine
-    if engine == 'openmm':
+    if engine == "openmm":
         generate_openmm_script(
             production_dir=production_dir,
             gro_file=gro_name,
         )
-    elif engine == 'amber':
+    elif engine == "amber":
         generate_amber_script(
             production_dir=production_dir,
             gro_file=gro_name,
         )
 
-    click.echo(f"\n  Success! Production folder ready at:")
+    click.echo("\n  Success! Production folder ready at:")
     click.echo(f"    {production_dir}")
-    click.echo(f"\n  To run the simulation:")
+    click.echo("\n  To run the simulation:")
     click.echo(f"    cd {production_dir}")
-    if engine == 'openmm':
-        click.echo(f"    python openmm_run.py")
-    elif engine == 'amber':
-        click.echo(f"    # Please provide your own run.npt.mdin file")
-        click.echo(f"    pmemd -O -i run.npt.mdin -c system.inpcrd -p system.prmtop -r restart.ncrst -x trajectory.nc")
+    if engine == "openmm":
+        click.echo("    python openmm_run.py")
+    elif engine == "amber":
+        click.echo("    # Please provide your own run.npt.mdin file")
+        click.echo(
+            "    pmemd -O -i run.npt.mdin -c system.inpcrd -p system.prmtop -r restart.ncrst -x trajectory.nc"
+        )
     click.echo()

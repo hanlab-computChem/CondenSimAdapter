@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from numba import njit
+
     _NUMBA = True
 except ImportError:  # pragma: no cover
     _NUMBA = False
@@ -50,10 +51,13 @@ except ImportError:  # pragma: no cover
     def njit(*args, **kwargs):  # type: ignore[misc]
         def _wrap(fn):
             return fn
+
         return _wrap
+
 
 try:
     from scipy.spatial import cKDTree as _cKDTree
+
     _SCIPY = True
 except ImportError:  # pragma: no cover
     _SCIPY = False
@@ -63,6 +67,7 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 # Geometric primitives
 # ---------------------------------------------------------------------------
+
 
 @njit(cache=True)
 def _segment_pierces_triangle(
@@ -85,8 +90,12 @@ def _segment_pierces_triangle(
     d1 = p1[1] - p0[1]
     d2 = p1[2] - p0[2]
 
-    e1_0 = v1[0] - v0[0];  e1_1 = v1[1] - v0[1];  e1_2 = v1[2] - v0[2]
-    e2_0 = v2[0] - v0[0];  e2_1 = v2[1] - v0[1];  e2_2 = v2[2] - v0[2]
+    e1_0 = v1[0] - v0[0]
+    e1_1 = v1[1] - v0[1]
+    e1_2 = v1[2] - v0[2]
+    e2_0 = v2[0] - v0[0]
+    e2_1 = v2[1] - v0[1]
+    e2_2 = v2[2] - v0[2]
 
     # h = cross(d, e2)
     h0 = d1 * e2_2 - d2 * e2_1
@@ -98,7 +107,9 @@ def _segment_pierces_triangle(
         return False  # segment parallel to triangle
 
     f = 1.0 / a
-    s0 = p0[0] - v0[0];  s1 = p0[1] - v0[1];  s2 = p0[2] - v0[2]
+    s0 = p0[0] - v0[0]
+    s1 = p0[1] - v0[1]
+    s2 = p0[2] - v0[2]
 
     u = f * (s0 * h0 + s1 * h1 + s2 * h2)
     if u < -eps or u > 1.0 + eps:
@@ -150,26 +161,26 @@ def _any_bond_pierces_triangle(
 
     # ---- PBC minimum-image correction (vectorised) ----
     if use_pbc:
-        centroid = (v0 + v1 + v2) / 3.0   # (3,)
-        da = bond_as - centroid            # (K, 3)
+        centroid = (v0 + v1 + v2) / 3.0  # (3,)
+        da = bond_as - centroid  # (K, 3)
         da -= np.round(da / box) * box
-        a = centroid + da                  # (K, 3) – images closest to centroid
+        a = centroid + da  # (K, 3) – images closest to centroid
 
         db = bond_bs - centroid
         db -= np.round(db / box) * box
         b = centroid + db
     else:
-        a = bond_as   # (K, 3)
+        a = bond_as  # (K, 3)
         b = bond_bs
 
     # ---- Vectorised Möller-Trumbore ----
-    e1 = v1 - v0          # (3,)
-    e2 = v2 - v0          # (3,)
+    e1 = v1 - v0  # (3,)
+    e2 = v2 - v0  # (3,)
 
-    d  = b - a             # (K, 3)  segment direction
+    d = b - a  # (K, 3)  segment direction
 
     # h = cross(d, e2)  →  (K, 3)
-    h  = np.cross(d, e2)
+    h = np.cross(d, e2)
 
     # a_det = dot(e1, h)  →  (K,)
     a_det = h @ e1
@@ -178,25 +189,25 @@ def _any_bond_pierces_triangle(
     if not np.any(valid):
         return False
 
-    f = np.where(valid, 1.0 / np.where(valid, a_det, 1.0), 0.0)   # (K,)
+    f = np.where(valid, 1.0 / np.where(valid, a_det, 1.0), 0.0)  # (K,)
 
-    s  = a - v0            # (K, 3)
-    u  = f * (s * h).sum(axis=1)   # (K,)
+    s = a - v0  # (K, 3)
+    u = f * (s * h).sum(axis=1)  # (K,)
 
     valid &= (u >= -eps) & (u <= 1.0 + eps)
     if not np.any(valid):
         return False
 
     # q = cross(s, e1)  →  (K, 3)
-    q  = np.cross(s, e1)
+    q = np.cross(s, e1)
 
-    v_coord = f * (d * q).sum(axis=1)   # (K,)
+    v_coord = f * (d * q).sum(axis=1)  # (K,)
 
     valid &= (v_coord >= -eps) & (u + v_coord <= 1.0 + eps)
     if not np.any(valid):
         return False
 
-    t  = f * (q @ e2)   # (K,)
+    t = f * (q @ e2)  # (K,)
 
     valid &= (t >= -eps) & (t <= 1.0 + eps)
     return bool(np.any(valid))
@@ -205,6 +216,7 @@ def _any_bond_pierces_triangle(
 # ---------------------------------------------------------------------------
 # Result container
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class EntanglementReport:
@@ -275,8 +287,9 @@ class EntanglementReport:
             ]
             for i, name, z in self.entangled_chains():
                 n_pp = len(self.primitive_paths[i]) if i < len(self.primitive_paths) else "?"
-                lines.append(f"    chain {i:4d}  ({name})  Z = {z:.0f}"
-                              f"  ({n_pp} primitive-path nodes)")
+                lines.append(
+                    f"    chain {i:4d}  ({name})  Z = {z:.0f}  ({n_pp} primitive-path nodes)"
+                )
             lines += [
                 "",
                 "  WARNING: Topological entanglements may produce non-physical",
@@ -294,6 +307,7 @@ class EntanglementReport:
 # ---------------------------------------------------------------------------
 # Main analyzer
 # ---------------------------------------------------------------------------
+
 
 class EntanglementAnalyzer:
     """
@@ -377,7 +391,9 @@ class EntanglementAnalyzer:
         n_beads = self.positions.shape[0]
         logger.info(
             "EntanglementAnalyzer: %d chains, %d beads, box=[%.1f, %.1f, %.1f] nm",
-            n_chains, n_beads, *self.box
+            n_chains,
+            n_beads,
+            *self.box,
         )
 
     # ------------------------------------------------------------------
@@ -442,7 +458,7 @@ class EntanglementAnalyzer:
         a = chain[:-1]
         b = chain[1:]
         diff = b - a
-        diff -= np.round(diff / box) * box   # minimum image
+        diff -= np.round(diff / box) * box  # minimum image
         mids = a + diff * 0.5
         # Fold into [0, box) for cKDTree with boxsize
         mids = mids - np.floor(mids / box) * box
@@ -518,8 +534,8 @@ class EntanglementAnalyzer:
             a = bond_as
             b = bond_bs
 
-        ab = b - a                       # (K, 3)
-        ap = point - a                   # (K, 3) – broadcasting
+        ab = b - a  # (K, 3)
+        ap = point - a  # (K, 3) – broadcasting
         ab_sq = np.sum(ab * ab, axis=1)  # (K,)
 
         # Project point onto line through a-b, clamp to segment
@@ -581,8 +597,13 @@ class EntanglementAnalyzer:
         i = 1
         while i < len(path) - 1:
             hit = _any_bond_pierces_triangle(
-                path[i - 1], path[i], path[i + 1],
-                all_bonds_as, all_bonds_bs, box, use_pbc,
+                path[i - 1],
+                path[i],
+                path[i + 1],
+                all_bonds_as,
+                all_bonds_bs,
+                box,
+                use_pbc,
             )
             if not hit:
                 path = np.delete(path, i, axis=0)
@@ -724,9 +745,12 @@ class EntanglementAnalyzer:
         prev_system_lpp = float("inf")
 
         logger.info(
-            "Z-code PPA+: %d chains, avg_bond=%.3f, thickness=%.4f, "
-            "distcrit1=%.4f, lmax=%.4f",
-            n_chains, avg_bond, self.thickness, self.distcrit1, self.lmax,
+            "Z-code PPA+: %d chains, avg_bond=%.3f, thickness=%.4f, distcrit1=%.4f, lmax=%.4f",
+            n_chains,
+            avg_bond,
+            self.thickness,
+            self.distcrit1,
+            self.lmax,
         )
 
         n_iter = 0
@@ -783,9 +807,13 @@ class EntanglementAnalyzer:
 
                     if tree is not None:
                         centroid = self._fold_coords(
-                            np.array([(v0[0] + v1[0] + v2[0]) / 3.0,
-                                      (v0[1] + v1[1] + v2[1]) / 3.0,
-                                      (v0[2] + v1[2] + v2[2]) / 3.0])
+                            np.array(
+                                [
+                                    (v0[0] + v1[0] + v2[0]) / 3.0,
+                                    (v0[1] + v1[1] + v2[1]) / 3.0,
+                                    (v0[2] + v1[2] + v2[2]) / 3.0,
+                                ]
+                            )
                         )
                         raw_idx = tree.query_ball_point(centroid, r=query_r)
 
@@ -811,8 +839,11 @@ class EntanglementAnalyzer:
                         nearby_bs = g_bs[other]
 
                     hit = _any_bond_pierces_triangle(
-                        v0, v1, v2,
-                        nearby_as, nearby_bs,
+                        v0,
+                        v1,
+                        v2,
+                        nearby_as,
+                        nearby_bs,
                         self.box,
                         self.use_pbc,
                     )
@@ -840,15 +871,17 @@ class EntanglementAnalyzer:
             for ci in range(n_chains):
                 if len(paths[ci]) > 2:
                     new_path = self._eliminate_ghost_nodes(
-                        paths[ci], g_as, g_bs, self.box, self.use_pbc,
+                        paths[ci],
+                        g_as,
+                        g_bs,
+                        self.box,
+                        self.use_pbc,
                     )
                     if len(new_path) < len(paths[ci]):
                         paths[ci] = new_path
 
             # Determine if there was a NET change in any path length.
-            any_changed = any(
-                len(paths[ci]) != start_lengths[ci] for ci in range(n_chains)
-            )
+            any_changed = any(len(paths[ci]) != start_lengths[ci] for ci in range(n_chains))
 
             # ---- Convergence check (Lpp-based + activity-based) ----
             system_lpp = self._system_lpp(paths)
@@ -856,9 +889,9 @@ class EntanglementAnalyzer:
 
             if not any_changed and lpp_change < self.convergence_lpp_threshold:
                 logger.info(
-                    "Z-code converged after %d outer iterations "
-                    "(Lpp_change=%.6f).",
-                    n_iter, lpp_change,
+                    "Z-code converged after %d outer iterations (Lpp_change=%.6f).",
+                    n_iter,
+                    lpp_change,
                 )
                 break
             prev_system_lpp = system_lpp
@@ -878,7 +911,11 @@ class EntanglementAnalyzer:
                 paths[ci] = paths[ci][[0, -1]]
                 continue
             is_kink = self._identify_kinks(
-                paths[ci], g_as_k, g_bs_k, self.box, self.use_pbc,
+                paths[ci],
+                g_as_k,
+                g_bs_k,
+                self.box,
+                self.use_pbc,
             )
             paths[ci] = paths[ci][is_kink]
 

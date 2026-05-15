@@ -122,9 +122,17 @@ target-version = "py311"
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+"CondenSimAdapter/backmap/cg2all/*" = ["E", "W", "I", "F403", "F405"]
+"CondenSimAdapter/backmap/cg2all/**/__init__.py" = ["F401"]
+"CondenSimAdapter/backmap/se3transformer/*" = ["E", "W", "I", "F403", "F405"]
+"CondenSimAdapter/backmap/se3transformer/**/__init__.py" = ["F401"]
+"CondenSimAdapter/legacy/*" = ["E", "W", "I", "F403", "F405"]
+"CondenSimAdapter/legacy/**/__init__.py" = ["F401"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -W ignore"
 markers = [
     "slow: long-running tests",
     "gpu: tests requiring GPU",

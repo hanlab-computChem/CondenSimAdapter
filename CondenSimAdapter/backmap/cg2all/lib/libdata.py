@@ -2,8 +2,6 @@
 
 import os
 import sys
-import copy
-import random
 import numpy as np
 import pathlib
 import mdtraj
@@ -20,11 +18,9 @@ from torch.utils.data import Dataset
 
 import dgl
 
-from .libconfig import BASE, DTYPE
+from .libconfig import DTYPE
 from . import libcg
-from .torch_basics import v_norm, v_size
 from .residue_constants import (
-    MAX_ATOM,
     AMINO_ACID_s,
     AMINO_ACID_REV_s,
     ATOM_INDEX_CA,

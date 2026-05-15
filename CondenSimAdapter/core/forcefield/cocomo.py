@@ -23,45 +23,198 @@ import openmm.unit as unit
 
 from .base import CGForceField
 
-
 # ---------------------------------------------------------------------------
 # Per-residue force-field parameters for COCOMO2
 # ---------------------------------------------------------------------------
 
 _FF_PARAM: Dict[str, dict] = {
-    "ALA": {"mass": 71.079,  "charge": 0.0,  "radius": 0.2845, "epsilon": 0.29519131, "azero": 0.0002, "surface": 0.796},
-    "ARG": {"mass": 157.197, "charge": 1.0,  "radius": 0.3567, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.921},
-    "ASN": {"mass": 114.104, "charge": 0.0,  "radius": 0.3150, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.281},
-    "ASP": {"mass": 114.080, "charge":-1.0,  "radius": 0.3114, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.162},
-    "CYS": {"mass": 103.139, "charge": 0.0,  "radius": 0.3024, "epsilon": 0.29519131, "azero": 0.0002, "surface": 1.074},
-    "GLN": {"mass": 128.131, "charge": 0.0,  "radius": 0.3311, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.575},
-    "GLU": {"mass": 128.107, "charge":-1.0,  "radius": 0.3279, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.462},
-    "GLY": {"mass": 57.052,  "charge": 0.0,  "radius": 0.2617, "epsilon": 0.29519131, "azero": 0.0002, "surface": 0.544},
-    "HIS": {"mass": 137.142, "charge": 0.0,  "radius": 0.3338, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.634},
-    "HSD": {"mass": 137.142, "charge": 0.0,  "radius": 0.3338, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.634},
-    "HSE": {"mass": 137.142, "charge": 0.0,  "radius": 0.3338, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.634},
-    "ILE": {"mass": 113.160, "charge": 0.0,  "radius": 0.3360, "epsilon": 0.29519131, "azero": 0.0002, "surface": 1.410},
-    "LEU": {"mass": 113.160, "charge": 0.0,  "radius": 0.3363, "epsilon": 0.29519131, "azero": 0.0002, "surface": 1.519},
-    "LYS": {"mass": 129.183, "charge": 1.0,  "radius": 0.3439, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.923},
-    "MET": {"mass": 131.193, "charge": 0.0,  "radius": 0.3381, "epsilon": 0.29519131, "azero": 0.0002, "surface": 1.620},
-    "PHE": {"mass": 147.177, "charge": 0.0,  "radius": 0.3556, "epsilon": 0.29519131, "azero": 0.0002, "surface": 1.869},
-    "PRO": {"mass": 98.125,  "charge": 0.0,  "radius": 0.3187, "epsilon": 0.29519131, "azero": 0.0002, "surface": 0.974},
-    "SER": {"mass": 87.078,  "charge": 0.0,  "radius": 0.2927, "epsilon": 0.17596101, "azero": 0.0,        "surface": 0.933},
-    "THR": {"mass": 101.105, "charge": 0.0,  "radius": 0.3108, "epsilon": 0.17596101, "azero": 0.0,        "surface": 1.128},
-    "TRP": {"mass": 186.214, "charge": 0.0,  "radius": 0.3754, "epsilon": 0.29519131, "azero": 0.0002, "surface": 2.227},
-    "TYR": {"mass": 163.176, "charge": 0.0,  "radius": 0.3611, "epsilon": 0.29519131, "azero": 0.0002, "surface": 2.018},
-    "VAL": {"mass": 99.133,  "charge": 0.0,  "radius": 0.3205, "epsilon": 0.29519131, "azero": 0.0002, "surface": 1.232},
+    "ALA": {
+        "mass": 71.079,
+        "charge": 0.0,
+        "radius": 0.2845,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 0.796,
+    },
+    "ARG": {
+        "mass": 157.197,
+        "charge": 1.0,
+        "radius": 0.3567,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.921,
+    },
+    "ASN": {
+        "mass": 114.104,
+        "charge": 0.0,
+        "radius": 0.3150,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.281,
+    },
+    "ASP": {
+        "mass": 114.080,
+        "charge": -1.0,
+        "radius": 0.3114,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.162,
+    },
+    "CYS": {
+        "mass": 103.139,
+        "charge": 0.0,
+        "radius": 0.3024,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 1.074,
+    },
+    "GLN": {
+        "mass": 128.131,
+        "charge": 0.0,
+        "radius": 0.3311,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.575,
+    },
+    "GLU": {
+        "mass": 128.107,
+        "charge": -1.0,
+        "radius": 0.3279,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.462,
+    },
+    "GLY": {
+        "mass": 57.052,
+        "charge": 0.0,
+        "radius": 0.2617,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 0.544,
+    },
+    "HIS": {
+        "mass": 137.142,
+        "charge": 0.0,
+        "radius": 0.3338,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.634,
+    },
+    "HSD": {
+        "mass": 137.142,
+        "charge": 0.0,
+        "radius": 0.3338,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.634,
+    },
+    "HSE": {
+        "mass": 137.142,
+        "charge": 0.0,
+        "radius": 0.3338,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.634,
+    },
+    "ILE": {
+        "mass": 113.160,
+        "charge": 0.0,
+        "radius": 0.3360,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 1.410,
+    },
+    "LEU": {
+        "mass": 113.160,
+        "charge": 0.0,
+        "radius": 0.3363,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 1.519,
+    },
+    "LYS": {
+        "mass": 129.183,
+        "charge": 1.0,
+        "radius": 0.3439,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.923,
+    },
+    "MET": {
+        "mass": 131.193,
+        "charge": 0.0,
+        "radius": 0.3381,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 1.620,
+    },
+    "PHE": {
+        "mass": 147.177,
+        "charge": 0.0,
+        "radius": 0.3556,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 1.869,
+    },
+    "PRO": {
+        "mass": 98.125,
+        "charge": 0.0,
+        "radius": 0.3187,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 0.974,
+    },
+    "SER": {
+        "mass": 87.078,
+        "charge": 0.0,
+        "radius": 0.2927,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 0.933,
+    },
+    "THR": {
+        "mass": 101.105,
+        "charge": 0.0,
+        "radius": 0.3108,
+        "epsilon": 0.17596101,
+        "azero": 0.0,
+        "surface": 1.128,
+    },
+    "TRP": {
+        "mass": 186.214,
+        "charge": 0.0,
+        "radius": 0.3754,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 2.227,
+    },
+    "TYR": {
+        "mass": 163.176,
+        "charge": 0.0,
+        "radius": 0.3611,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 2.018,
+    },
+    "VAL": {
+        "mass": 99.133,
+        "charge": 0.0,
+        "radius": 0.3205,
+        "epsilon": 0.29519131,
+        "azero": 0.0002,
+        "surface": 1.232,
+    },
 }
 
-_CATIONPI   = 0.30   # kJ/mol  cation-pi well depth
-_PIPI       = 0.10   # kJ/mol  pi-pi well depth
-_KBOND      = 4184.0 # kJ/mol/nm^2
+_CATIONPI = 0.30  # kJ/mol  cation-pi well depth
+_PIPI = 0.10  # kJ/mol  pi-pi well depth
+_KBOND = 4184.0  # kJ/mol/nm^2
 _KANGLE_PRO = 4.184  # kJ/mol/rad^2
-_L0_PRO     = 0.38   # nm
-_THETA0     = np.pi  # 180 deg
-_KAPPA      = 1.0    # nm  (Debye length for SASA electrostatics)
-_SURF_REF   = 0.7    # COCOMO surface threshold
-_CUTOFF     = 3.0    # nm  (nonbonded cutoff, matching original COCOMO)
+_L0_PRO = 0.38  # nm
+_THETA0 = np.pi  # 180 deg
+_KAPPA = 1.0  # nm  (Debye length for SASA electrostatics)
+_SURF_REF = 0.7  # COCOMO surface threshold
+_CUTOFF = 3.0  # nm  (nonbonded cutoff, matching original COCOMO)
 _DEFAULT_SASA = 999.0  # nm^2 (default SASA for exposed residues, matching original COCOMO)
 
 
@@ -79,13 +232,14 @@ class CocomoFF(CGForceField):
     _exclude_enm_from_nonbonded: bool = False
 
     # COCOMO-specific ENM parameters (matching original COCOMO implementation)
-    ENM_K = 500.0       # kJ/mol/nm^2
-    ENM_CUTOFF = 0.9    # nm
+    ENM_K = 500.0  # kJ/mol/nm^2
+    ENM_CUTOFF = 0.9  # nm
 
     def add_masses(self, system: mm.System, chain_meta: List[dict]) -> None:
         for meta in chain_meta:
             for aa in meta["sequence"]:
                 from ..topology import ONE_TO_THREE
+
                 three = ONE_TO_THREE.get(aa, "GLY")
                 m = _FF_PARAM.get(three, _FF_PARAM["GLY"])["mass"]
                 system.addParticle(m * unit.amu)
@@ -107,7 +261,7 @@ class CocomoFF(CGForceField):
         for meta in chain_meta:
             for i in range(meta["start"], meta["end"]):
                 atom_to_chain[i] = meta
-        
+
         # Compute SASA using mdsim for MDP components (matching original COCOMO)
         # Build per-atom SASA array (IDP residues use default value)
         sasa_vals = self._compute_all_sasa(chain_meta)
@@ -128,12 +282,7 @@ class CocomoFF(CGForceField):
         vdw.setCutoffDistance(_CUTOFF * unit.nanometer)
 
         # --- Electrostatics ---
-        elec_expr = (
-            "S*(A+Z)/r*exp(-r/K0);"
-            "A=A1*A2;"
-            "Z=Z1+Z2;"
-            "S=sqrt(S1*S2)"
-        )
+        elec_expr = "S*(A+Z)/r*exp(-r/K0);A=A1*A2;Z=Z1+Z2;S=sqrt(S1*S2)"
         elec = mm.CustomNonbondedForce(elec_expr)
         elec.addGlobalParameter("K0", _KAPPA * unit.nanometer)
         elec.addPerParticleParameter("A")
@@ -144,9 +293,7 @@ class CocomoFF(CGForceField):
 
         # Cation-pi force (same form as VdW, different epsilon, interaction group)
         cpi_expr = (
-            "S*4*{eps}*((sigma/r)^10-(sigma/r)^5);"
-            "sigma=0.5*(sigma1+sigma2);"
-            "S=sqrt(S1*S2)"
+            "S*4*{eps}*((sigma/r)^10-(sigma/r)^5);sigma=0.5*(sigma1+sigma2);S=sqrt(S1*S2)"
         ).format(eps=_CATIONPI)
         cpi = mm.CustomNonbondedForce(cpi_expr)
         cpi.addPerParticleParameter("sigma")
@@ -156,9 +303,7 @@ class CocomoFF(CGForceField):
 
         # Pi-pi force
         pipi_expr = (
-            "S*4*{eps}*((sigma/r)^10-(sigma/r)^5);"
-            "sigma=0.5*(sigma1+sigma2);"
-            "S=sqrt(S1*S2)"
+            "S*4*{eps}*((sigma/r)^10-(sigma/r)^5);sigma=0.5*(sigma1+sigma2);S=sqrt(S1*S2)"
         ).format(eps=_PIPI)
         pipi = mm.CustomNonbondedForce(pipi_expr)
         pipi.addPerParticleParameter("sigma")
@@ -174,16 +319,21 @@ class CocomoFF(CGForceField):
 
             # VdW
             sigma_vdw = p["radius"] * 2 * 2 ** (-1.0 / 6.0)
-            vdw.addParticle([sigma_vdw * unit.nanometer,
-                             p["epsilon"] * unit.kilojoule_per_mole,
-                             sf])
+            vdw.addParticle(
+                [sigma_vdw * unit.nanometer, p["epsilon"] * unit.kilojoule_per_mole, sf]
+            )
 
             # Electrostatics
-            A_val = (np.sqrt(0.75 * abs(p["charge"])) * np.sign(p["charge"])
-                     if p["charge"] != 0 else 0.0)
-            elec.addParticle([A_val * unit.nanometer * unit.kilojoule_per_mole,
-                              p["azero"] * (unit.nanometer * unit.kilojoule_per_mole) ** 0.5,
-                              sf])
+            A_val = (
+                np.sqrt(0.75 * abs(p["charge"])) * np.sign(p["charge"]) if p["charge"] != 0 else 0.0
+            )
+            elec.addParticle(
+                [
+                    A_val * unit.nanometer * unit.kilojoule_per_mole,
+                    p["azero"] * (unit.nanometer * unit.kilojoule_per_mole) ** 0.5,
+                    sf,
+                ]
+            )
 
             # Cation / aromatic tracking
             sigma_sp = p["radius"] * 2 * 2 ** (-1.0 / 6.0)
@@ -221,9 +371,11 @@ class CocomoFF(CGForceField):
             atoms = list(chain.atoms())
             for i in range(len(atoms) - 2):
                 ha.addAngle(
-                    atoms[i].index, atoms[i + 1].index, atoms[i + 2].index,
+                    atoms[i].index,
+                    atoms[i + 1].index,
+                    atoms[i + 2].index,
                     _THETA0 * unit.radian,
-                    _KANGLE_PRO * unit.kilojoule_per_mole / unit.radian ** 2,
+                    _KANGLE_PRO * unit.kilojoule_per_mole / unit.radian**2,
                 )
         return ha
 
@@ -249,22 +401,23 @@ class CocomoFF(CGForceField):
     ) -> mm.Force:
         """
         Elastic Network Model (ENM) for folded domains.
-        
+
         COCOMO-specific implementation using original COCOMO parameters:
         - k = 500 kJ/mol/nm^2
         - cutoff = 0.9 nm
-        
+
         Reference: Original COCOMO implementation (cocomo_model.py)
         """
-        from typing import Optional
-        
+
         # Use COCOMO-specific defaults if not provided
         if k is None:
             k = self.ENM_K
         if cutoff is None:
             cutoff = self.ENM_CUTOFF
-        min_seq_sep = 3  # COCOMO: skip i+1 and i+2, start from i+3 (matching original implementation)
-        
+        min_seq_sep = (
+            3  # COCOMO: skip i+1 and i+2, start from i+3 (matching original implementation)
+        )
+
         if restraint_type == "go":
             expr = "k*(5*(s/r)^12-6*(s/r)^10); s=s; k=k"
             cs = mm.CustomBondForce(expr)
@@ -272,17 +425,17 @@ class CocomoFF(CGForceField):
             cs.addPerBondParameter("k")
         else:
             cs = mm.HarmonicBondForce()
-        
+
         cs.setUsesPeriodicBoundaryConditions(True)
         n_bonds = 0
-        
+
         for meta in chain_meta:
             if not meta["folded_domains"]:
                 continue
             chain_start = meta["start"]
-            for (dom_s, dom_e) in meta["folded_domains"]:
-                a0 = chain_start + dom_s - 1   # absolute, 0-based
-                a1 = chain_start + dom_e        # exclusive
+            for dom_s, dom_e in meta["folded_domains"]:
+                a0 = chain_start + dom_s - 1  # absolute, 0-based
+                a1 = chain_start + dom_e  # exclusive
                 indices = list(range(a0, a1))
                 for ii in range(len(indices)):
                     for jj in range(ii + min_seq_sep, len(indices)):
@@ -290,16 +443,18 @@ class CocomoFF(CGForceField):
                         d = float(np.linalg.norm(positions[gi] - positions[gj]))
                         if d <= cutoff:
                             if restraint_type == "go":
-                                cs.addBond(gi, gj,
-                                           [d * unit.nanometer,
-                                            k * unit.kilojoule_per_mole])
+                                cs.addBond(
+                                    gi, gj, [d * unit.nanometer, k * unit.kilojoule_per_mole]
+                                )
                             else:
                                 cs.addBond(
-                                    gi, gj,
+                                    gi,
+                                    gj,
                                     d * unit.nanometer,
-                                    k * unit.kilojoule_per_mole / unit.nanometer ** 2)
+                                    k * unit.kilojoule_per_mole / unit.nanometer**2,
+                                )
                             n_bonds += 1
-        
+
         return cs if n_bonds > 0 else None
 
     # ------------------------------------------------------------------
@@ -310,18 +465,19 @@ class CocomoFF(CGForceField):
     def _compute_sasa(pdb_path: str) -> np.ndarray:
         """
         Compute per-residue SASA using internal Shrake-Rupley implementation.
-        
+
         Uses n_sphere_points=1920 (matching original COCOMO implementation).
         Requires full-atom PDB (not CG CA-only structure).
-        
+
         Args:
             pdb_path: Path to full-atom PDB file
-            
+
         Returns:
             SASA values in nm^2 per residue, or None if calculation fails
         """
         try:
             from ..sasa import calc_sasa_from_pdb
+
             return calc_sasa_from_pdb(pdb_path, n_sphere_points=1920)
         except Exception:
             return None
@@ -330,23 +486,23 @@ class CocomoFF(CGForceField):
     def _compute_all_sasa(chain_meta: List[dict]) -> Optional[np.ndarray]:
         """
         Compute SASA values for all atoms across all chains.
-        
+
         For MDP components with pdb_path, use mdsim to compute SASA from full-atom PDB.
         For IDP components or when SASA computation fails, use default value.
-        
+
         Returns:
             Array of SASA values (nm^2) per atom, or None if no SASA computed
         """
         from ..config import ComponentType
-        
+
         all_sasa = []
         has_sasa = False
-        
+
         for meta in chain_meta:
             n_res = len(meta["sequence"])
             pdb_path = meta.get("pdb_path")
             comp_type = meta.get("comp_type")
-            
+
             if comp_type == ComponentType.MDP and pdb_path:
                 # Try to compute SASA from full-atom PDB
                 sasa = CocomoFF._compute_sasa(pdb_path)
@@ -359,7 +515,7 @@ class CocomoFF(CGForceField):
             else:
                 # IDP or no pdb_path, use default SASA
                 all_sasa.extend([_DEFAULT_SASA] * n_res)
-        
+
         return np.array(all_sasa) if has_sasa else None
 
     @staticmethod
@@ -373,20 +529,20 @@ class CocomoFF(CGForceField):
         Convert SASA values to COCOMO surface screening factors.
 
         surface_factor = min(1, sasa_nm / (surf_ref * residue_native_surface))
-        
+
         For IDP (disordered): fully exposed, surface_factor = 1.0
         For MDP (folded domains): computed from SASA or defaults to 0.7 (global surfscale)
         """
         from ..config import ComponentType
-        
+
         factors = []
         for atom_idx, atom in enumerate(topology.atoms()):
             p = _FF_PARAM.get(atom.residue.name, _FF_PARAM["GLY"])
-            native_sasa = p["surface"]   # nm^2
-            
+            native_sasa = p["surface"]  # nm^2
+
             if sasa_vals is not None:
                 # Use provided SASA values (typically for MDP from PDB)
-                s_nm = float(sasa_vals[atom_idx]) / 100.0   # Å^2 -> nm^2
+                s_nm = float(sasa_vals[atom_idx]) / 100.0  # Å^2 -> nm^2
                 sf = min(1.0, s_nm / native_sasa / surf_ref)
             else:
                 # No SASA provided: distinguish IDP vs MDP

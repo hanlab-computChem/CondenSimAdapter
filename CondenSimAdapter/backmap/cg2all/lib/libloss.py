@@ -3,7 +3,7 @@
 import torch
 
 import dgl
-from typing import Optional, List
+from typing import Optional
 
 from .libconfig import DTYPE, EPS, DATA_HOME
 from .residue_constants import (
@@ -16,10 +16,8 @@ from .residue_constants import (
     ATOM_INDEX_PRO_CD,
     ATOM_INDEX_CYS_CB,
     ATOM_INDEX_CYS_SG,
-    BOND_LENGTH0,
     BOND_LENGTH_PROLINE_RING,
     BOND_LENGTH_DISULFIDE,
-    BOND_ANGLE0,
 )
 
 from .libcg import get_residue_center_of_mass
@@ -30,7 +28,6 @@ from .torch_basics import (
     inner_product,
     rotate_vector_inv,
     acos_safe,
-    pi,
     torsion_angle,
 )
 
@@ -267,8 +264,8 @@ def loss_f_bonded_energy(batch: dgl.DGLGraph, R: torch.Tensor, weight_s=(1.0, 0.
     v2 = R[1:, ATOM_INDEX_CA, :] - R[1:, ATOM_INDEX_N, :]
     v2_ref = R_ref[1:, ATOM_INDEX_CA, :] - R_ref[1:, ATOM_INDEX_N, :]
     #
-    d0 = v_size(v0)
-    d2 = v_size(v2)
+    v_size(v0)
+    v_size(v2)
 
     #
     # bond angles
@@ -660,7 +657,7 @@ class CoarseGrainedGeometryEnergy(object):
         residue_type = batch.ndata["residue_type"]
         #
         bonded = batch.ndata["continuous"][1:]
-        n_bonded = torch.sum(bonded)
+        torch.sum(bonded)
         b_len0 = self.b_len0[residue_type[1:], residue_type[:-1]]
         v1 = r_cg[1:] - r_cg[:-1]
         b_len = v_size(v1)
@@ -669,7 +666,7 @@ class CoarseGrainedGeometryEnergy(object):
         bond_energy = torch.sum((x_lb.square() + x_ub.square()) * bonded)
         #
         angled = bonded[1:] * bonded[:-1]
-        n_angled = torch.sum(angled)
+        torch.sum(angled)
         angle_type = self.angle_aa_map[residue_type[:-2], residue_type[2:]]
         b_ang0 = self.b_ang0[residue_type[1:-1], angle_type]
         v1 = v_norm(v1)
@@ -686,14 +683,14 @@ class CoarseGrainedGeometryEnergy(object):
         residue_type = batch.ndata["residue_type"]
         #
         bonded = batch.ndata["continuous"][1:]
-        n_bonded = torch.sum(bonded)
+        torch.sum(bonded)
         b_len0 = self.b_len0[residue_type[1:], residue_type[:-1]]
         v1 = r_cg[1:] - r_cg[:-1]
         d = (v_size(v1) - b_len0[:, 0]) / b_len0[:, 1]
         bond_energy = torch.sum(torch.square(d) * bonded)
         #
         angled = bonded[1:] * bonded[:-1]
-        n_angled = torch.sum(angled)
+        torch.sum(angled)
         angle_type = self.angle_aa_map[residue_type[:-2], residue_type[2:]]
         b_ang0 = self.b_ang0[residue_type[1:-1], angle_type]
         v1 = v_norm(v1)
@@ -728,11 +725,9 @@ class CoarseGrainedGeometryEnergy(object):
 
 
 def test():
-    import time
     from libconfig import BASE
     import libcg
-    import functools
-    from libdata import PDBset, create_trajectory_from_batch
+    from libdata import PDBset
 
     base_dir = BASE / "pdb.processed"
     pdblist = base_dir / "loss_test"
@@ -758,10 +753,10 @@ def test():
     native = dgl.slice_batch(batch, 0)
     model = dgl.slice_batch(batch, 1)
     #
-    R_ref = native.ndata["output_xyz"].clone()
-    bb_ref = native.ndata["correct_bb"].clone()
-    R_model = model.ndata["output_xyz"].clone()
-    bb_model = model.ndata["correct_bb"].clone()
+    native.ndata["output_xyz"].clone()
+    native.ndata["correct_bb"].clone()
+    model.ndata["output_xyz"].clone()
+    model.ndata["correct_bb"].clone()
 
     from residue_constants import (
         RIGID_TRANSFORMS_TENSOR,
@@ -772,13 +767,12 @@ def test():
         TORSION_ENERGY_DEP,
     )
 
-    RIGID_OPs = (
+    (
         (RIGID_TRANSFORMS_TENSOR.to(device), RIGID_GROUPS_TENSOR.to(device)),
         (RIGID_TRANSFORMS_DEP.to(device), RIGID_GROUPS_DEP.to(device)),
     )
-    TORSION_PARs = (TORSION_ENERGY_TENSOR.to(device), TORSION_ENERGY_DEP.to(device))
+    (TORSION_ENERGY_TENSOR.to(device), TORSION_ENERGY_DEP.to(device))
     #
-    import time
 
 
 if __name__ == "__main__":

@@ -1,15 +1,14 @@
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 import pytest
-
 from CondenSimAdapter.src.pdb2gmx_utils import (
     run_pdb2gmx_for_structure,
     run_pdb2gmx_for_topology,
 )
 from CondenSimAdapter.src.top_to_softcore_system import (
-    GromacsTopFileWithSoftcore,
     NONBONDED_STANDARD,
+    GromacsTopFileWithSoftcore,
 )
 
 
@@ -55,8 +54,9 @@ def test_openmm_builds_system_from_gromacs_topology(tmp_path: Path) -> None:
 
     pytest.importorskip("openmm")
 
-    from openmm.app import GromacsGroFile, forcefield as ff
     import openmm.unit as unit
+    from openmm.app import GromacsGroFile
+    from openmm.app import forcefield as ff
 
     repo_root = Path(__file__).resolve().parents[1]
     input_pdb = repo_root / "tests/data/FUS_LC_backmap/final.aa.pdb"

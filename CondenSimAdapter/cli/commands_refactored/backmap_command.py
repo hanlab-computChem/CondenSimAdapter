@@ -12,28 +12,57 @@ def _model_help() -> str:
     """Lazily resolve SUPPORTED_MODELS for help text."""
     try:
         from ...backmap.backmapper import SUPPORTED_MODELS
-        return f'cg2all model type. Options: {", ".join(SUPPORTED_MODELS)}.'
+
+        return f"cg2all model type. Options: {', '.join(SUPPORTED_MODELS)}."
     except ImportError:
-        return 'cg2all model type (e.g. CalphaBasedModel).'
+        return "cg2all model type (e.g. CalphaBasedModel)."
 
 
-@click.command('backmap', context_settings={'help_option_names': ['-h', '--help']})
-@click.option('--input', '-i', 'input_path', type=click.Path(), default=None,
-              help=(
-                  'Input CG PDB file or CG output directory '
-                  '(final.pdb used automatically).  '
-                  'If omitted, defaults to {system_name}_CG when -f is given.'
-              ))
-@click.option('--input-file', '-f', type=click.Path(exists=True), default=None,
-              help='Simulation config YAML (for topology type and system name).')
-@click.option('--output', '-o', 'output_dir', type=click.Path(), default=None,
-              help='Output directory (default: {system_name}_backmap).')
-@click.option('--model-type', '-m', type=str, default='CalphaBasedModel',
-              show_default=True,
-              help=_model_help())
-@click.option('--device', '-d', type=str, default='cpu', show_default=True,
-              help='Compute device: cpu | cuda | cuda:0 etc.')
-@click.option('--verbose', '-v', is_flag=True, default=False)
+@click.command("backmap", context_settings={"help_option_names": ["-h", "--help"]})
+@click.option(
+    "--input",
+    "-i",
+    "input_path",
+    type=click.Path(),
+    default=None,
+    help=(
+        "Input CG PDB file or CG output directory "
+        "(final.pdb used automatically).  "
+        "If omitted, defaults to {system_name}_CG when -f is given."
+    ),
+)
+@click.option(
+    "--input-file",
+    "-f",
+    type=click.Path(exists=True),
+    default=None,
+    help="Simulation config YAML (for topology type and system name).",
+)
+@click.option(
+    "--output",
+    "-o",
+    "output_dir",
+    type=click.Path(),
+    default=None,
+    help="Output directory (default: {system_name}_backmap).",
+)
+@click.option(
+    "--model-type",
+    "-m",
+    type=str,
+    default="CalphaBasedModel",
+    show_default=True,
+    help=_model_help(),
+)
+@click.option(
+    "--device",
+    "-d",
+    type=str,
+    default="cpu",
+    show_default=True,
+    help="Compute device: cpu | cuda | cuda:0 etc.",
+)
+@click.option("--verbose", "-v", is_flag=True, default=False)
 def backmap_command(
     input_path: Optional[str],
     input_file: Optional[str],
@@ -66,6 +95,7 @@ def backmap_command(
     if input_file:
         try:
             import yaml
+
             name, _ = load_config_from_yaml(input_file)
             system_name = name
             with open(input_file) as fh:

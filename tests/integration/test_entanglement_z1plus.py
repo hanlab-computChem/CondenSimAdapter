@@ -44,7 +44,7 @@ def _parse_z1_benchmark(path: str) -> Tuple[np.ndarray, List[Tuple[int, int]], n
     with open(path) as fh:
         lines = fh.readlines()
 
-    n_chains = int(lines[0].strip())
+    int(lines[0].strip())
     box = np.array([float(x) for x in lines[1].strip().split()], dtype=np.float64)
 
     bead_tokens = lines[2].strip().split()
@@ -117,7 +117,10 @@ def test_builtin_vs_z1plus_benchmark(bench_name: str, n_chains: int):
     # simulated-annealing paths; applying Z1+-style kink detection to our
     # paths often strips true constraint points and hurts agreement.
     analyzer = EntanglementAnalyzer(
-        positions, boundaries, box=box, kinkdef1=1000.0,
+        positions,
+        boundaries,
+        box=box,
+        kinkdef1=1000.0,
     )
     report = analyzer.run(max_iter=200)
 
@@ -133,7 +136,7 @@ def test_builtin_vs_z1plus_benchmark(bench_name: str, n_chains: int):
     if not (binary_agree / n >= 0.60):
         pytest.fail(
             f"{bench_name}: binary agreement {binary_agree}/{n} = "
-            f"{binary_agree/n:.1%} < 60%\n"
+            f"{binary_agree / n:.1%} < 60%\n"
             f"  built-in Z: {report.z_values[:10]}...\n"
             f"  Z1+      Z: {z_z1[:10]}..."
         )

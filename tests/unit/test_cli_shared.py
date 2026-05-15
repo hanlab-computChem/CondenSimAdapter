@@ -9,23 +9,23 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
 import click
+import pytest
 
 from CondenSimAdapter.cli.shared import (
     CG_FORCE_FIELDS,
+    GEOMETRY_DEFAULTS,
     MINIMIZE_FORCE_FIELDS,
+    parse_box,
+    parse_component_pattern,
     validate_cg_force_field,
     validate_minimize_force_field,
-    parse_component_pattern,
-    parse_box,
-    GEOMETRY_DEFAULTS,
 )
-
 
 # =============================================================================
 # Force Field Constants Tests
 # =============================================================================
+
 
 class TestForceFieldConstants:
     """Tests for force field constants."""
@@ -54,6 +54,7 @@ class TestForceFieldConstants:
 # =============================================================================
 # CG Force Field Validation Tests
 # =============================================================================
+
 
 class TestValidateCGForceField:
     """Tests for validate_cg_force_field function."""
@@ -93,6 +94,7 @@ class TestValidateCGForceField:
 # Minimize Force Field Validation Tests
 # =============================================================================
 
+
 class TestValidateMinimizeForceField:
     """Tests for validate_minimize_force_field function."""
 
@@ -116,6 +118,7 @@ class TestValidateMinimizeForceField:
 # Component Pattern Parsing Tests
 # =============================================================================
 
+
 class TestParseComponentPattern:
     """Tests for parse_component_pattern function."""
 
@@ -123,48 +126,49 @@ class TestParseComponentPattern:
         """Test single component pattern."""
         result = parse_component_pattern("I", nmol=1)
         assert len(result) == 1
-        assert result[0]['type'] == 'IDP'
+        assert result[0]["type"] == "IDP"
 
     def test_multiple_idps(self):
         """Test multiple IDP pattern."""
         result = parse_component_pattern("III", nmol=2)
         assert len(result) == 3
         for comp in result:
-            assert comp['type'] == 'IDP'
-            assert comp['nmol'] == 2
+            assert comp["type"] == "IDP"
+            assert comp["nmol"] == 2
 
     def test_mixed_pattern(self):
         """Test mixed IDP/MDP pattern."""
         result = parse_component_pattern("IIMII", nmol=1)
         assert len(result) == 5
-        assert result[0]['type'] == 'IDP'
-        assert result[1]['type'] == 'IDP'
-        assert result[2]['type'] == 'MDP'
-        assert result[3]['type'] == 'IDP'
-        assert result[4]['type'] == 'IDP'
+        assert result[0]["type"] == "IDP"
+        assert result[1]["type"] == "IDP"
+        assert result[2]["type"] == "MDP"
+        assert result[3]["type"] == "IDP"
+        assert result[4]["type"] == "IDP"
 
 
 # =============================================================================
 # Box Parsing Tests
 # =============================================================================
 
+
 class TestParseBox:
     """Tests for parse_box function (accepts tuple from nargs=3)."""
 
     def test_grid_default_when_none(self):
         """Test grid default box when None provided."""
-        result = parse_box(None, "grid", GEOMETRY_DEFAULTS['grid']['box'])
-        assert result == GEOMETRY_DEFAULTS['grid']['box']
+        result = parse_box(None, "grid", GEOMETRY_DEFAULTS["grid"]["box"])
+        assert result == GEOMETRY_DEFAULTS["grid"]["box"]
 
     def test_slab_default_when_none(self):
         """Test slab default box when None provided."""
-        result = parse_box(None, "slab", GEOMETRY_DEFAULTS['slab']['box'])
-        assert result == GEOMETRY_DEFAULTS['slab']['box']
+        result = parse_box(None, "slab", GEOMETRY_DEFAULTS["slab"]["box"])
+        assert result == GEOMETRY_DEFAULTS["slab"]["box"]
 
     def test_droplet_default_when_none(self):
         """Test droplet default box when None provided."""
-        result = parse_box(None, "droplet", GEOMETRY_DEFAULTS['droplet']['box'])
-        assert result == GEOMETRY_DEFAULTS['droplet']['box']
+        result = parse_box(None, "droplet", GEOMETRY_DEFAULTS["droplet"]["box"])
+        assert result == GEOMETRY_DEFAULTS["droplet"]["box"]
 
     def test_custom_box_tuple(self):
         """Test custom box with tuple."""

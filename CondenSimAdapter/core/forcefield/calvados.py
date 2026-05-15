@@ -34,10 +34,10 @@ class CalvadosFF(CGForceField):
     """
 
     # CALVADOS default LJ parameters
-    EPS_LJ   = 0.8368    # kJ/mol  (0.2 kcal/mol)
-    RC_LJ    = 2.0       # nm
-    RC_YU    = 4.0       # nm
-    K_BOND   = 8368.0    # kJ/mol/nm^2  (CALVADOS standard; matches original implementation)
+    EPS_LJ = 0.8368  # kJ/mol  (0.2 kcal/mol)
+    RC_LJ = 2.0  # nm
+    RC_YU = 4.0  # nm
+    K_BOND = 8368.0  # kJ/mol/nm^2  (CALVADOS standard; matches original implementation)
 
     def __init__(self, version: int = 2):
         if version not in (2, 3):
@@ -53,11 +53,11 @@ class CalvadosFF(CGForceField):
             for row in reader:
                 one = row["one"]
                 self._params[one] = {
-                    "sigma" : float(row["sigmas"]),
+                    "sigma": float(row["sigmas"]),
                     "lambda": float(row["lambdas"]),
-                    "q"     : float(row["q"]),
-                    "mass"  : float(row["MW"]),
-                    "r0"    : float(row["bondlength"]),
+                    "q": float(row["q"]),
+                    "mass": float(row["MW"]),
+                    "r0": float(row["bondlength"]),
                 }
 
     # ------------------------------------------------------------------
@@ -83,7 +83,7 @@ class CalvadosFF(CGForceField):
         # ID parameter: protein=1, lipid=0, crowder=-1
         # Uses select(id1+id2, (id1*id2)*0.5*(l1+l2), fixed_lambda) for mixing
         eps = self.EPS_LJ
-        rc  = self.RC_LJ
+        rc = self.RC_LJ
         # fixed_lambda used for non-protein interactions (lipid/lipid, protein/lipid, etc.)
         fixed_lambda = 0.5  # Default for cross-type interactions
         expr = (
@@ -137,16 +137,17 @@ class CalvadosFF(CGForceField):
         k = k or self.K_BOND
         hb = mm.HarmonicBondForce()
         hb.setUsesPeriodicBoundaryConditions(True)
-        atoms = list(topology.atoms())
+        list(topology.atoms())
         for bond in topology.bonds():
             i_atom = bond[0]
             j_atom = bond[1]
             aa_i = self._aa_from_atom(i_atom)
             r0_i = self._params.get(aa_i, {}).get("r0", r0)
             hb.addBond(
-                i_atom.index, j_atom.index,
+                i_atom.index,
+                j_atom.index,
                 r0_i * unit.nanometer,
-                k * unit.kilojoule_per_mole / unit.nanometer ** 2,
+                k * unit.kilojoule_per_mole / unit.nanometer**2,
             )
         return hb
 
@@ -157,4 +158,5 @@ class CalvadosFF(CGForceField):
     @staticmethod
     def _aa_from_atom(atom: app.topology.Atom) -> str:
         from ..topology import THREE_TO_ONE
+
         return THREE_TO_ONE.get(atom.residue.name, "G")

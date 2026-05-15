@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import argparse
 import os
 import shutil
 import subprocess
-import argparse
 import sys
 from pathlib import Path
 
@@ -91,11 +91,11 @@ def main():
     sequence = args.sequence
     # Use protein name for files if provided, otherwise default to the sequence
     protein_name = args.name if args.name else sequence
-    
+
     # Use Path objects for modern and robust file system interactions
     work_dir = Path(__file__).parent.resolve()
     os.chdir(work_dir)
-    
+
     # Always use a local 'out' directory for intermediate files
     out_dir = work_dir / "out"
 
@@ -134,14 +134,14 @@ def main():
             input=('1', '0', '0')  # Amber ff, N-term: NH3+, C-term: COO-
         )
     except Exception as e:
-        print(f"FATAL ERROR: gmx pdb2gmx failed. Please ensure GROMACS is correctly installed,")
-        print(f"configured, and the 'pace-new' force field is available.")
+        print("FATAL ERROR: gmx pdb2gmx failed. Please ensure GROMACS is correctly installed,")
+        print("configured, and the 'pace-new' force field is available.")
         print(f"GromacsWrapper error: {e}")
         sys.exit(1)
 
     # 5. Process topology with a series of helper scripts
     print("\nStep 4: Processing topology with helper scripts...")
-    
+
     # Run first set of scripts
     run_command([sys.executable, "change_resid.py", f"{protein_name}-pace.pdb"], outfile=f"{protein_name}-pace-resid.pdb")
     run_command([sys.executable, "genPair.py", "draft.top"], outfile=f"{protein_name}-pace.patch")
@@ -149,7 +149,7 @@ def main():
     # Read intermediate result needed for the next script
     with open("res.temp", "r") as f:
         residue_count = f.read().strip()
-    
+
     # Run second set of scripts
     run_command([sys.executable, "insert_param.py", f"{protein_name}-pace.patch", "draft.top"], outfile=f"{protein_name}-pace.top")
     run_command([sys.executable, "change_molecule_name.py", f"{protein_name}-pace.top", protein_name])
@@ -178,7 +178,7 @@ def main():
             except OSError as e:
                 print(f"Error cleaning up file {f_path}: {e}")
 
-    print(f"\n--- Preparation complete! ---")
+    print("\n--- Preparation complete! ---")
     print(f"Final structure and topology files are located in: '{out_dir}'")
 
 if __name__ == "__main__":

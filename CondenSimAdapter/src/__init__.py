@@ -10,17 +10,22 @@ This shim re-exports the new names under their old aliases so that
 any remaining code that still imports from ``src`` continues to work.
 """
 
+from ..backmap.backmapper import Backmapper as BackmapSimulator
+from ..backmap.backmapper import BackmapResult
 from ..core.config import (
-    CGConfig          as CGSimulationConfig,
-    Component         as CGComponent,
+    CGConfig as CGSimulationConfig,
+)
+from ..core.config import (
+    Component as CGComponent,
+)
+from ..core.config import (
     ComponentType,
-    TopologyType,
     SimulationResult,
+    TopologyType,
 )
 from ..core.simulation import CGSimulation as CGSimulator
-from ..backmap.backmapper import Backmapper as BackmapSimulator, BackmapResult
-from ..minimize.minimizer import MinimizeSimulator, MinimizeConfig, MinimizeResult
 from ..minimize.config_loader import load_config_from_yaml
+from ..minimize.minimizer import MinimizeConfig, MinimizeResult, MinimizeSimulator
 from .pdb_tool import ChainLabel, extract_coordinates_from_pdb
 
 # Expose plumed_generator from src (still lives here)

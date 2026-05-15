@@ -8,7 +8,7 @@ concrete force-field classes only implement their non-bonded physics.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 import openmm as mm
@@ -55,6 +55,7 @@ class CGForceField(ABC):
     def add_masses(self, system: mm.System, chain_meta: List[dict]) -> None:
         """Set per-particle masses. Override to change masses."""
         from ..topology import RESIDUE_MASS
+
         for meta in chain_meta:
             for aa in meta["sequence"]:
                 system.addParticle(RESIDUE_MASS.get(aa, 57.05) * unit.amu)
@@ -80,8 +81,7 @@ class CGForceField(ABC):
         hb.setUsesPeriodicBoundaryConditions(True)
         for bond in topology.bonds():
             i, j = bond[0].index, bond[1].index
-            hb.addBond(i, j, r0 * unit.nanometer,
-                       k * unit.kilojoule_per_mole / unit.nanometer ** 2)
+            hb.addBond(i, j, r0 * unit.nanometer, k * unit.kilojoule_per_mole / unit.nanometer**2)
         return hb
 
     def build_enm_bonds(
@@ -123,9 +123,9 @@ class CGForceField(ABC):
             if not meta["folded_domains"]:
                 continue
             chain_start = meta["start"]
-            for (dom_s, dom_e) in meta["folded_domains"]:
-                a0 = chain_start + dom_s - 1   # absolute, 0-based
-                a1 = chain_start + dom_e        # exclusive
+            for dom_s, dom_e in meta["folded_domains"]:
+                a0 = chain_start + dom_s - 1  # absolute, 0-based
+                a1 = chain_start + dom_e  # exclusive
                 indices = list(range(a0, a1))
                 for ii in range(len(indices)):
                     for jj in range(ii + 2, len(indices)):
@@ -133,14 +133,16 @@ class CGForceField(ABC):
                         d = float(np.linalg.norm(positions[gi] - positions[gj]))
                         if d <= cutoff:
                             if restraint_type == "go":
-                                cs.addBond(gi, gj,
-                                           [d * unit.nanometer,
-                                            k * unit.kilojoule_per_mole])
+                                cs.addBond(
+                                    gi, gj, [d * unit.nanometer, k * unit.kilojoule_per_mole]
+                                )
                             else:
                                 cs.addBond(
-                                    gi, gj,
+                                    gi,
+                                    gj,
                                     d * unit.nanometer,
-                                    k * unit.kilojoule_per_mole / unit.nanometer ** 2)
+                                    k * unit.kilojoule_per_mole / unit.nanometer**2,
+                                )
                             n_bonds += 1
 
         return cs if n_bonds > 0 else None
@@ -169,7 +171,7 @@ class CGForceField(ABC):
             "dist = sqrt((x - cx)^2 + (y - cy)^2 + (z - cz)^2)"
         )
         force = mm.CustomExternalForce(expr)
-        force.addGlobalParameter("k_drop", k * unit.kilojoule_per_mole / unit.nanometer ** 2)
+        force.addGlobalParameter("k_drop", k * unit.kilojoule_per_mole / unit.nanometer**2)
         force.addGlobalParameter("r_drop", radius * unit.nanometer)
         force.addGlobalParameter("cx", float(centre[0]) * unit.nanometer)
         force.addGlobalParameter("cy", float(centre[1]) * unit.nanometer)
@@ -184,6 +186,7 @@ class CGForceField(ABC):
 # Shared physics helpers
 # ---------------------------------------------------------------------------
 
+
 def debye_huckel_params(temperature: float, ionic: float):
     """
     Compute Yukawa / Debye-Hückel parameters.
@@ -192,13 +195,13 @@ def debye_huckel_params(temperature: float, ionic: float):
         eps_yu: energy prefactor (kJ/mol · nm)
         k_yu:   inverse Debye length (nm^-1)
     """
-    kT = 8.3145 * temperature * 1e-3   # kJ/mol
+    kT = 8.3145 * temperature * 1e-3  # kJ/mol
 
     def fepsw(T):
-        return 5321 / T + 233.76 - 0.9297 * T + 1.417e-3 * T ** 2 - 8.292e-7 * T ** 3
+        return 5321 / T + 233.76 - 0.9297 * T + 1.417e-3 * T**2 - 8.292e-7 * T**3
 
-    epsw  = fepsw(temperature)
-    lB    = (1.6021766 ** 2 / (4 * np.pi * 8.854188 * epsw)) * 6.02214076e3 / kT
+    epsw = fepsw(temperature)
+    lB = (1.6021766**2 / (4 * np.pi * 8.854188 * epsw)) * 6.02214076e3 / kT
     eps_yu = lB * kT
-    k_yu   = np.sqrt(8 * np.pi * lB * ionic * 6.02214076 / 10.0)
+    k_yu = np.sqrt(8 * np.pi * lB * ionic * 6.02214076 / 10.0)
     return eps_yu, k_yu

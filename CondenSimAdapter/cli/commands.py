@@ -8,50 +8,49 @@ This module imports commands from the commands package for backward compatibilit
 """
 
 # Import shared utilities for backward compatibility
+# Import commands from the commands package
+from .commands_refactored import (
+    backmap_command,
+    cg_command,
+    droplet_density_command,
+    forcefield_command,
+    info_command,
+    init_command,
+    minimize_command,
+    pace_opt_command,
+    to_run_command,
+)
 from .shared import (
     CG_FORCE_FIELDS,
     FORCE_FIELD_TO_RUNNER,
     GEOMETRY_DEFAULTS,
     MINIMIZE_FORCE_FIELDS,
+    generate_yaml_with_comments,
+    parse_box,
+    parse_component_pattern,
     validate_cg_force_field,
     validate_minimize_force_field,
-    parse_component_pattern,
-    parse_box,
-    generate_yaml_with_comments,
-)
-
-# Import commands from the commands package
-from .commands_refactored import (
-    init_command,
-    cg_command,
-    backmap_command,
-    pace_opt_command,
-    minimize_command,
-    info_command,
-    droplet_density_command,
-    to_run_command,
-    forcefield_command,
 )
 
 __all__ = [
     # Shared utilities
-    'CG_FORCE_FIELDS',
-    'FORCE_FIELD_TO_RUNNER',
-    'GEOMETRY_DEFAULTS',
-    'MINIMIZE_FORCE_FIELDS',
-    'validate_cg_force_field',
-    'validate_minimize_force_field',
-    'parse_component_pattern',
-    'parse_box',
-    'generate_yaml_with_comments',
+    "CG_FORCE_FIELDS",
+    "FORCE_FIELD_TO_RUNNER",
+    "GEOMETRY_DEFAULTS",
+    "MINIMIZE_FORCE_FIELDS",
+    "validate_cg_force_field",
+    "validate_minimize_force_field",
+    "parse_component_pattern",
+    "parse_box",
+    "generate_yaml_with_comments",
     # Commands
-    'init_command',
-    'cg_command',
-    'backmap_command',
-    'pace_opt_command',
-    'minimize_command',
-    'info_command',
-    'droplet_density_command',
-    'to_run_command',
-    'forcefield_command',
+    "init_command",
+    "cg_command",
+    "backmap_command",
+    "pace_opt_command",
+    "minimize_command",
+    "info_command",
+    "droplet_density_command",
+    "to_run_command",
+    "forcefield_command",
 ]

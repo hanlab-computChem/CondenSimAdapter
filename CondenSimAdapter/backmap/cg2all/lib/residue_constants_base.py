@@ -1,5 +1,4 @@
 import numpy as np
-from .libconfig import DATA_HOME
 
 AMINO_ACID_s = (
     "ALA",

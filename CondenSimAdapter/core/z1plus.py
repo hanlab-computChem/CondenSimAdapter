@@ -38,11 +38,11 @@ Usage
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
-import logging
-import tempfile
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Z1 input-format writer
 # ---------------------------------------------------------------------------
+
 
 def write_z1_format(
     positions: np.ndarray,
@@ -108,6 +109,7 @@ def write_z1_format(
 # Z1+ result parser
 # ---------------------------------------------------------------------------
 
+
 def _parse_z1plus_output(
     workdir: str,
     n_chains: int,
@@ -148,7 +150,7 @@ def _parse_z1plus_output(
     lpp_arr: Optional[np.ndarray] = None
     if os.path.exists(lpp_path):
         with open(lpp_path) as fh:
-            lpp_vals = [float(l.strip()) for l in fh if l.strip()]
+            lpp_vals = [float(line.strip()) for line in fh if line.strip()]
         lpp_arr = np.array(lpp_vals[:n_chains], dtype=np.float64)
 
     # Z1+summary.dat (optional, first line is the summary)
@@ -173,6 +175,7 @@ def _parse_z1plus_output(
 # ---------------------------------------------------------------------------
 # Main wrapper class
 # ---------------------------------------------------------------------------
+
 
 class Z1PlusWrapper:
     """
@@ -275,17 +278,13 @@ class Z1PlusWrapper:
             Returns None if Z1+ is not available or execution fails.
         """
         if not self.is_available():
-            logger.warning(
-                "Z1+ binary not found.\n%s", self.install_instructions()
-            )
+            logger.warning("Z1+ binary not found.\n%s", self.install_instructions())
             return None
 
         n_chains = len(chain_boundaries)
 
         # Write Z1 input file
-        z1_content = write_z1_format(
-            positions, chain_boundaries, box, unit_scale
-        )
+        z1_content = write_z1_format(positions, chain_boundaries, box, unit_scale)
 
         # Set up working directory (Z1+ writes output to CWD)
         own_tmp = workdir is None
@@ -331,6 +330,7 @@ class Z1PlusWrapper:
         finally:
             if own_tmp:
                 import shutil as _sh
+
                 _sh.rmtree(tmpdir, ignore_errors=True)
 
     # ------------------------------------------------------------------

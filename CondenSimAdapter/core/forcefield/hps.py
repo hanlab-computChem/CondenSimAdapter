@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 import openmm as mm
@@ -28,10 +28,26 @@ _DATA = Path(__file__).parent / "data"
 
 # Canonical amino acid ordering for HPS index (0-19)
 _AA_ORDER = [
-    "ALA", "ARG", "ASN", "ASP", "CYS",
-    "GLN", "GLU", "GLY", "HIS", "ILE",
-    "LEU", "LYS", "MET", "PHE", "PRO",
-    "SER", "THR", "TRP", "TYR", "VAL",
+    "ALA",
+    "ARG",
+    "ASN",
+    "ASP",
+    "CYS",
+    "GLN",
+    "GLU",
+    "GLY",
+    "HIS",
+    "ILE",
+    "LEU",
+    "LYS",
+    "MET",
+    "PHE",
+    "PRO",
+    "SER",
+    "THR",
+    "TRP",
+    "TYR",
+    "VAL",
 ]
 _AA_INDEX: Dict[str, int] = {aa: i for i, aa in enumerate(_AA_ORDER)}
 _N_AA = 20
@@ -45,19 +61,19 @@ class HPSFF(CGForceField):
     tabulated for all 20x20 amino acid combinations.
     """
 
-    EPS_AH   = 0.8368    # kJ/mol
-    RC_AH    = 2.0       # nm (fallback, but actual cutoff uses 4*sigma dynamic)
-    RC_DH    = 3.5       # nm
+    EPS_AH = 0.8368  # kJ/mol
+    RC_AH = 2.0  # nm (fallback, but actual cutoff uses 4*sigma dynamic)
+    RC_DH = 3.5  # nm
     DH_DIELECTRIC = 80.0
     # HPS-Urry correction: lambda_eff = lambda - delta
-    DELTA    = 0.08
-    K_BOND   = 8368.0    # kJ/mol/nm^2
-    
+    DELTA = 0.08
+    K_BOND = 8368.0  # kJ/mol/nm^2
+
     # ENM parameters for folded domains (MDP support)
     # Matching CALVADOS standard: k=700, cutoff=0.9, min_seq_sep=3
-    ENM_K       = 700.0     # kJ/mol/nm^2
-    ENM_CUTOFF  = 0.9       # nm
-    ENM_MIN_SEP = 3         # minimum sequence separation
+    ENM_K = 700.0  # kJ/mol/nm^2
+    ENM_CUTOFF = 0.9  # nm
+    ENM_MIN_SEP = 3  # minimum sequence separation
 
     def __init__(self):
         self._sigma_table: np.ndarray = np.zeros((_N_AA, _N_AA))
@@ -72,8 +88,8 @@ class HPSFF(CGForceField):
             reader = csv.DictReader(f)
             for row in reader:
                 aa1, aa2 = row["atom_type1"], row["atom_type2"]
-                sigma  = float(row["sigma"])
-                lam    = float(row["lambda"]) - self.DELTA
+                sigma = float(row["sigma"])
+                lam = float(row["lambda"]) - self.DELTA
                 i = _AA_INDEX.get(aa1, 0)
                 j = _AA_INDEX.get(aa2, 0)
                 self._sigma_table[i, j] = sigma
@@ -84,13 +100,15 @@ class HPSFF(CGForceField):
         # Residue charges (standard protonation at pH 7)
         # HIS = 0.5 matches original HPS-Urry implementation
         self._charges = {
-            "ARG":  1.0, "LYS":  1.0,
-            "ASP": -1.0, "GLU": -1.0,
-            "HIS":  0.5,
+            "ARG": 1.0,
+            "LYS": 1.0,
+            "ASP": -1.0,
+            "GLU": -1.0,
+            "HIS": 0.5,
         }
 
     def _get_type_index(self, atom: app.topology.Atom) -> int:
-        return _AA_INDEX.get(atom.residue.name, 7)   # 7 = GLY fallback
+        return _AA_INDEX.get(atom.residue.name, 7)  # 7 = GLY fallback
 
     def _get_charge(self, atom: app.topology.Atom) -> float:
         return self._charges.get(atom.residue.name, 0.0)
@@ -107,13 +125,13 @@ class HPSFF(CGForceField):
         forces = []
 
         # Flatten tables into row-major lists for Discrete2DFunction
-        sigma_flat  = self._sigma_table.flatten().tolist()
+        sigma_flat = self._sigma_table.flatten().tolist()
         lambda_flat = self._lambda_table.flatten().tolist()
 
         # --- Ashbaugh-Hatch via tabulated sigma / lambda ---
         # Dynamic cutoff: 4*sigma (matches original HPS-Urry implementation)
         eps = self.EPS_AH
-        lj_at_cutoff = 4*eps*((1/4)**12 - (1/4)**6)
+        lj_at_cutoff = 4 * eps * ((1 / 4) ** 12 - (1 / 4) ** 6)
         expr = (
             f"(f1+f2-offset)*step(4*sigma_ah-r);"
             f"offset=lam_ah*{lj_at_cutoff};"
@@ -124,14 +142,8 @@ class HPSFF(CGForceField):
             f"lam_ah=lambda_table(atom_type1,atom_type2)"
         )
         ah = mm.CustomNonbondedForce(expr)
-        ah.addTabulatedFunction(
-            "sigma_table",
-            mm.Discrete2DFunction(_N_AA, _N_AA, sigma_flat)
-        )
-        ah.addTabulatedFunction(
-            "lambda_table",
-            mm.Discrete2DFunction(_N_AA, _N_AA, lambda_flat)
-        )
+        ah.addTabulatedFunction("sigma_table", mm.Discrete2DFunction(_N_AA, _N_AA, sigma_flat))
+        ah.addTabulatedFunction("lambda_table", mm.Discrete2DFunction(_N_AA, _N_AA, lambda_flat))
         ah.addPerParticleParameter("atom_type")  # integer index
         ah.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
         # Dynamic cutoff: 4*max(sigma) to cover all pair interactions
@@ -146,10 +158,7 @@ class HPSFF(CGForceField):
         eps_yu, _ = debye_huckel_params(temperature, ionic)
         k_yu = 1.0 / _LDBY_HPS  # inverse Debye length
         shift_dh = float(np.exp(-k_yu * self.RC_DH) / self.RC_DH)
-        dh_expr = (
-            f"q1*q2*{eps_yu:.6f}*(exp(-{k_yu:.6f}*r)/r-{shift_dh:.6e})*"
-            f"step({self.RC_DH}-r)"
-        )
+        dh_expr = f"q1*q2*{eps_yu:.6f}*(exp(-{k_yu:.6f}*r)/r-{shift_dh:.6e})*step({self.RC_DH}-r)"
         dh = mm.CustomNonbondedForce(dh_expr)
         dh.addPerParticleParameter("q")
         dh.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
@@ -184,12 +193,12 @@ class HPSFF(CGForceField):
     ) -> Optional[mm.Force]:
         """
         Elastic Network Model (ENM) for folded domains.
-        
+
         HPS-specific implementation using CALVADOS-standard parameters:
         - k = 700 kJ/mol/nm^2 (matching original CALVADOS/HPS)
         - cutoff = 0.9 nm
         - min_seq_sep = 3
-        
+
         Reference: Original CALVADOS and OpenABC HPS implementation
         """
         # Use HPS-specific defaults if not provided
@@ -198,7 +207,7 @@ class HPSFF(CGForceField):
         if cutoff is None:
             cutoff = self.ENM_CUTOFF
         min_seq_sep = self.ENM_MIN_SEP
-        
+
         if restraint_type == "go":
             expr = "k*(5*(s/r)^12-6*(s/r)^10); s=s; k=k"
             cs = mm.CustomBondForce(expr)
@@ -206,17 +215,17 @@ class HPSFF(CGForceField):
             cs.addPerBondParameter("k")
         else:
             cs = mm.HarmonicBondForce()
-        
+
         cs.setUsesPeriodicBoundaryConditions(True)
         n_bonds = 0
-        
+
         for meta in chain_meta:
             if not meta["folded_domains"]:
                 continue
             chain_start = meta["start"]
-            for (dom_s, dom_e) in meta["folded_domains"]:
-                a0 = chain_start + dom_s - 1   # absolute, 0-based
-                a1 = chain_start + dom_e        # exclusive
+            for dom_s, dom_e in meta["folded_domains"]:
+                a0 = chain_start + dom_s - 1  # absolute, 0-based
+                a1 = chain_start + dom_e  # exclusive
                 indices = list(range(a0, a1))
                 for ii in range(len(indices)):
                     for jj in range(ii + min_seq_sep, len(indices)):
@@ -224,14 +233,16 @@ class HPSFF(CGForceField):
                         d = float(np.linalg.norm(positions[gi] - positions[gj]))
                         if d <= cutoff:
                             if restraint_type == "go":
-                                cs.addBond(gi, gj,
-                                           [d * unit.nanometer,
-                                            k * unit.kilojoule_per_mole])
+                                cs.addBond(
+                                    gi, gj, [d * unit.nanometer, k * unit.kilojoule_per_mole]
+                                )
                             else:
                                 cs.addBond(
-                                    gi, gj,
+                                    gi,
+                                    gj,
                                     d * unit.nanometer,
-                                    k * unit.kilojoule_per_mole / unit.nanometer ** 2)
+                                    k * unit.kilojoule_per_mole / unit.nanometer**2,
+                                )
                             n_bonds += 1
-        
+
         return cs if n_bonds > 0 else None

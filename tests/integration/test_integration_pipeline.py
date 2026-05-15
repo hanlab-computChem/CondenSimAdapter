@@ -9,22 +9,23 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from CondenSimAdapter.core.config import (
     CGConfig,
     Component,
     ComponentType,
-    TopologyType,
     SimulationParams,
+    TopologyType,
 )
 from CondenSimAdapter.core.simulation import CGSimulation
-
 
 # =============================================================================
 # Complete Workflow Integration Tests
 # =============================================================================
+
 
 @pytest.mark.slow
 class TestCGSimulationWorkflow:
@@ -57,10 +58,10 @@ class TestCGSimulationWorkflow:
     def test_complete_simulation_workflow(self, tiny_simulation_config, tmp_path):
         """Test a complete simulation workflow runs successfully."""
         output_dir = tmp_path / "sim_output"
-        
+
         sim = CGSimulation(tiny_simulation_config)
         result = sim.run(str(output_dir))
-        
+
         assert result.success is True
         assert result.final_pdb is not None
         assert Path(result.final_pdb).exists()
@@ -72,10 +73,10 @@ class TestCGSimulationWorkflow:
     def test_simulation_creates_output_files(self, tiny_simulation_config, tmp_path):
         """Test that simulation creates all expected output files."""
         output_dir = tmp_path / "sim_output"
-        
+
         sim = CGSimulation(tiny_simulation_config)
         result = sim.run(str(output_dir))
-        
+
         # Check main outputs
         assert Path(result.final_pdb).exists()
         assert Path(result.trajectory).exists()
@@ -84,10 +85,10 @@ class TestCGSimulationWorkflow:
     def test_simulation_creates_top_pdb(self, tiny_simulation_config, tmp_path):
         """Test that simulation creates initial topology PDB."""
         output_dir = tmp_path / "sim_output"
-        
+
         sim = CGSimulation(tiny_simulation_config)
-        result = sim.run(str(output_dir))
-        
+        sim.run(str(output_dir))
+
         top_pdb = output_dir / "top.pdb"
         assert top_pdb.exists()
 
@@ -120,14 +121,16 @@ class TestMultiForceFieldWorkflow:
             simulation=sim_params,
         )
 
-    @pytest.mark.parametrize("minimal_config", ["hps", "calvados2", "cocomo", "mpipi"], indirect=True)
+    @pytest.mark.parametrize(
+        "minimal_config", ["hps", "calvados2", "cocomo", "mpipi"], indirect=True
+    )
     def test_force_field_runs(self, minimal_config, tmp_path):
         """Test that each force field can run a minimal simulation."""
         output_dir = tmp_path / f"sim_{minimal_config.force_field}"
-        
+
         sim = CGSimulation(minimal_config)
         result = sim.run(str(output_dir))
-        
+
         assert result.success, f"Force field {minimal_config.force_field} failed: {result.error}"
         assert Path(result.final_pdb).exists()
 
@@ -135,6 +138,7 @@ class TestMultiForceFieldWorkflow:
 # =============================================================================
 # Multi-Component System Tests
 # =============================================================================
+
 
 @pytest.mark.slow
 class TestMultiComponentSystems:
@@ -167,11 +171,11 @@ class TestMultiComponentSystems:
             topology=TopologyType.CUBIC,
             simulation=sim_params,
         )
-        
+
         output_dir = tmp_path / "multi_output"
         sim = CGSimulation(config)
         result = sim.run(str(output_dir))
-        
+
         assert result.success is True
 
     def test_slab_topology(self, tmp_path):
@@ -196,11 +200,11 @@ class TestMultiComponentSystems:
             slab_width=20.0,
             simulation=sim_params,
         )
-        
+
         output_dir = tmp_path / "slab_output"
         sim = CGSimulation(config)
         result = sim.run(str(output_dir))
-        
+
         assert result.success is True
 
     def test_droplet_topology(self, tmp_path):
@@ -225,17 +229,18 @@ class TestMultiComponentSystems:
             droplet_radius=5.0,
             simulation=sim_params,
         )
-        
+
         output_dir = tmp_path / "droplet_output"
         sim = CGSimulation(config)
         result = sim.run(str(output_dir))
-        
+
         assert result.success is True
 
 
 # =============================================================================
 # Error Handling Tests
 # =============================================================================
+
 
 class TestErrorHandling:
     """Tests for error handling in workflows."""

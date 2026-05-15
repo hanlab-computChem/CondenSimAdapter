@@ -3,8 +3,6 @@ import json
 import pickle
 import numpy as np
 import torch
-from collections import namedtuple
-import sys
 import importlib
 
 from .libconfig import DATA_HOME
@@ -91,8 +89,8 @@ else:
     rigid_group_transformations = {}
     for ss in SECONDARY_STRUCTURE_s:
         if ss == "":
-            fn0 = DATA_HOME / f"rigid_groups.json"
-            fn1 = DATA_HOME / f"rigid_body_transformation_between_frames.json"
+            fn0 = DATA_HOME / "rigid_groups.json"
+            fn1 = DATA_HOME / "rigid_body_transformation_between_frames.json"
         else:
             fn0 = DATA_HOME / f"rigid_groups_{ss}.json"
             fn1 = DATA_HOME / f"rigid_body_transformation_between_frames_{ss}.json"

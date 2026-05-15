@@ -1,6 +1,5 @@
 import sys
 
-
 pep_name = sys.argv[2]
 old_name = None
 read_mol = False
@@ -14,7 +13,7 @@ for rl in open(sys.argv[1],'r'):
  if read_mol:
   if 'Protein' in rl:
    old_name = rl[:-1].split()[0]
-   
+
   if '[' in rl:
    read_mol =False
 

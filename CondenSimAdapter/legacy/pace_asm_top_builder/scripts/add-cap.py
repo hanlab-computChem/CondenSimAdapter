@@ -109,45 +109,45 @@ def cal_xyz( c1, c2, c3,  b,  a,  d):
 
 
     PI=3.141592654
-    ca=a;
-    cb=b;
-    cd=d;
-    ca=ca/180.*PI;
-    cd=cd/180.*PI;
+    ca=a
+    cb=b
+    cd=d
+    ca=ca/180.*PI
+    cd=cd/180.*PI
 
-    VECSUB(r21, c1, c2);
-    VECSUB(r23, c3, c2);
+    VECSUB(r21, c1, c2)
+    VECSUB(r23, c3, c2)
 
-    VECOUT(r, r21, r23);
+    VECOUT(r, r21, r23)
 
-    VECOUT(h, r21, r);
-
-
-
-    rv=VECLEN(r);
-    hv=VECLEN(h);
-    r21v=VECLEN(r21);
+    VECOUT(h, r21, r)
 
 
-    VECELONG(r,r,1./rv);
 
-    VECELONG(h,h,1./hv);
-
-    VECELONG(r21,r21,1./r21v);
-
-
-    rbv=cb*math.sin(ca);
-
-    VECELONG(rb21, r21, math.cos(PI-ca)*cb);
-
-    VECELONG(rc, h, math.cos(PI-math.fabs(cd)) );
-    VECELONG(rb, r, math.sin(math.fabs(cd))*_fsgn(cd) );
-    VECADD (rb, rb, rc);
-    VECELONG (rb, rb, rbv);
+    rv=VECLEN(r)
+    hv=VECLEN(h)
+    r21v=VECLEN(r21)
 
 
-    VECADD( ci, rb, rb21);
-    VECADD( ci, ci, c1);
+    VECELONG(r,r,1./rv)
+
+    VECELONG(h,h,1./hv)
+
+    VECELONG(r21,r21,1./r21v)
+
+
+    rbv=cb*math.sin(ca)
+
+    VECELONG(rb21, r21, math.cos(PI-ca)*cb)
+
+    VECELONG(rc, h, math.cos(PI-math.fabs(cd)) )
+    VECELONG(rb, r, math.sin(math.fabs(cd))*_fsgn(cd) )
+    VECADD (rb, rb, rc)
+    VECELONG (rb, rb, rbv)
+
+
+    VECADD( ci, rb, rb21)
+    VECADD( ci, ci, c1)
 
     return ci
 
@@ -184,7 +184,7 @@ ft_CA=-1
 ft_N=-1
 _id=0
 while ft_C<0 or ft_CA<0 or ft_N<0:
- if ft_C<0: 
+ if ft_C<0:
   if nm[_id]=="C":
    ft_C=_id
  if ft_CA<0:
@@ -253,5 +253,5 @@ if sys.argv[2]=='Cter' or sys.argv[2]=='both':
 
 
 
-  
+
 

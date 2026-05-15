@@ -19,7 +19,6 @@ Changes vs old code:
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import subprocess
 import traceback
@@ -34,6 +33,7 @@ log = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MinimizeConfig:
     """Configuration for the all-atom minimization workflow."""
@@ -42,7 +42,7 @@ class MinimizeConfig:
     forcefield_type: str = "1-a99SBdisp"
 
     # Implicit-solvent GB model used in stage 3
-    gb_model: str = "OBC2"                  # OBC2 | GBn2 (OBC2 has better CUDA support)
+    gb_model: str = "OBC2"  # OBC2 | GBn2 (OBC2 has better CUDA support)
 
     # Softcore schedule
     softcore_lambdas: List[float] = field(default_factory=lambda: [0.75, 0.85, 0.95])
@@ -52,23 +52,23 @@ class MinimizeConfig:
     gpu_id: int = 0
 
     # Minimisation convergence
-    tolerance: float = 100.0               # kJ/(mol·nm)
+    tolerance: float = 100.0  # kJ/(mol·nm)
     max_iterations: int = 5000
 
     # Non-bonded cutoff
-    nonbonded_cutoff: float = 2.0          # nm
+    nonbonded_cutoff: float = 2.0  # nm
 
     # pdb2gmx options
     disable_disulfide: bool = False
-    his_type: Optional[int] = 1            # 1 = HIE (default) | 0 = HID | None = skip -his
+    his_type: Optional[int] = 1  # 1 = HIE (default) | 0 = HID | None = skip -his
 
     # Solvation (explicit water)
     solvate: bool = False
-    ion_concentration: float = 0.15        # M
+    ion_concentration: float = 0.15  # M
 
     # Post-minimization box building for droplet systems
-    droplet_box_type: Optional[str] = None # dodecahedron | cubic | octahedron
-    droplet_distance: float = 2.0          # nm
+    droplet_box_type: Optional[str] = None  # dodecahedron | cubic | octahedron
+    droplet_distance: float = 2.0  # nm
 
     # Box resize (optional pre-processing)
     box_resize: bool = False
@@ -78,6 +78,7 @@ class MinimizeConfig:
 @dataclass
 class MinimizeResult:
     """Result of the minimization workflow."""
+
     success: bool
     output_pdb: str = ""
     input_pdb: str = ""
@@ -91,6 +92,7 @@ class MinimizeResult:
 # Simulator
 # ---------------------------------------------------------------------------
 
+
 class MinimizeSimulator:
     """
     Protein all-atom energy minimizer.
@@ -102,19 +104,22 @@ class MinimizeSimulator:
     def __init__(
         self,
         config: MinimizeConfig,
-        components: list,      # list of Component (core.config) or legacy CGComponent
+        components: list,  # list of Component (core.config) or legacy CGComponent
         system_name: str,
     ):
-        self.config      = config
-        self.components  = components
+        self.config = config
+        self.components = components
         self.system_name = system_name
-        self._ff_name    = self._resolve_ff_name(config.forcefield_type)
+        self._ff_name = self._resolve_ff_name(config.forcefield_type)
 
     @classmethod
-    def from_yaml(cls, yaml_path: str, config: Optional[MinimizeConfig] = None) -> MinimizeSimulator:
+    def from_yaml(
+        cls, yaml_path: str, config: Optional[MinimizeConfig] = None
+    ) -> MinimizeSimulator:
         """Construct from a CGConfig YAML file."""
-        from .config_loader import load_config_from_yaml
         from ..core.config import Component
+        from .config_loader import load_config_from_yaml
+
         system_name, raw_components = load_config_from_yaml(yaml_path)
         components = [Component.from_dict(c) for c in raw_components]
         return cls(config or MinimizeConfig(), components, system_name)
@@ -140,7 +145,7 @@ class MinimizeSimulator:
 
         topology_dir = out / "topology"
         structure_dir = out / "structure"
-        minimize_dir  = out / "minimize"
+        minimize_dir = out / "minimize"
         for d in (topology_dir, structure_dir, minimize_dir):
             d.mkdir(exist_ok=True)
 
@@ -160,18 +165,15 @@ class MinimizeSimulator:
                 log.warning(f"Force field folder not found for '{self.config.forcefield_type}'")
 
             from .topology_builder import (
+                count_total_his,
                 generate_all_atom_topology,
                 merge_topologies,
-                count_total_his,
             )
+
             # Compute the exact total number of HIS prompts pdb2gmx will emit
             # for the full-system structure (all nmol copies of every component).
             # When his_type is None pdb2gmx is run without -his so no stdin needed.
-            his_repeat = (
-                count_total_his(self.components)
-                if self.config.his_type is not None
-                else 0
-            )
+            his_repeat = count_total_his(self.components) if self.config.his_type is not None else 0
 
             comp_tops, water_model = generate_all_atom_topology(
                 self.components,
@@ -186,10 +188,13 @@ class MinimizeSimulator:
             )
 
             # Step 2 — structure GRO
-            click.echo(f"  [2/4] Processing input structure ...")
+            click.echo("  [2/4] Processing input structure ...")
             from .topology_builder import run_pdb2gmx_for_structure
+
             structure_gro = run_pdb2gmx_for_structure(
-                Path(input_pdb), structure_dir, self._ff_name,
+                Path(input_pdb),
+                structure_dir,
+                self._ff_name,
                 water_model="none",
                 disable_disulfide=self.config.disable_disulfide,
                 his_type=self.config.his_type,
@@ -202,13 +207,13 @@ class MinimizeSimulator:
                 )
 
             # Step 3 — OpenMM softcore minimization (implicit solvent)
-            click.echo(f"  [3/4] OpenMM softcore minimization (3 stages) ...")
+            click.echo("  [3/4] OpenMM softcore minimization (3 stages) ...")
             min_result = self._run_openmm_minimization(
                 str(structure_gro), str(merged_top), minimize_dir
             )
 
             final_pdb = min_result.get("final_pdb", "")
-            result.success     = bool(final_pdb and Path(final_pdb).exists())
+            result.success = bool(final_pdb and Path(final_pdb).exists())
             result.intermediate_files = min_result
 
             if result.success:
@@ -224,6 +229,7 @@ class MinimizeSimulator:
                 # Generate plumed.dat for MDP components (contact map restraints)
                 try:
                     from ..src.plumed_generator import generate_plumed_for_minimize
+
                     plumed_generated = generate_plumed_for_minimize(
                         components=self.components,
                         topology_dir=topology_dir,
@@ -231,9 +237,9 @@ class MinimizeSimulator:
                         verbose=True,
                     )
                     if plumed_generated:
-                        click.echo(f"  plumed.dat generated  →  plumed.dat")
+                        click.echo("  plumed.dat generated  →  plumed.dat")
                     else:
-                        click.echo(f"  No MDP components — skipping plumed.dat")
+                        click.echo("  No MDP components — skipping plumed.dat")
                 except Exception as _plumed_err:
                     click.echo(f"  Warning: plumed.dat generation failed: {_plumed_err}")
 
@@ -241,7 +247,8 @@ class MinimizeSimulator:
                 if self.config.droplet_box_type:
                     click.echo(f"  [4/4] Building droplet box ({self.config.droplet_box_type}) ...")
                     droplet_gro = self._build_droplet_box(
-                        final_pdb, out / "droplet",
+                        final_pdb,
+                        out / "droplet",
                         self.config.droplet_box_type,
                         self.config.droplet_distance,
                     )
@@ -253,17 +260,21 @@ class MinimizeSimulator:
                     click.echo(f"  Droplet box done  →  {root_box.name}")
 
                 if self.config.solvate:
-                    click.echo(f"  [4/4] Explicit solvation ({water_model}, {self.config.ion_concentration} M) ...")
+                    click.echo(
+                        f"  [4/4] Explicit solvation ({water_model}, {self.config.ion_concentration} M) ..."
+                    )
                     solvated_gro, solvated_top = self.solvate_system(
-                        final_pdb, str(root_top),
-                        out / "solvate", self.config.ion_concentration,
+                        final_pdb,
+                        str(root_top),
+                        out / "solvate",
+                        self.config.ion_concentration,
                     )
                     # Promote solvated outputs to root dir
                     root_solvated_gro = out / "minimize_final_solvated.gro"
                     root_solvated_top = out / "topol.top"
                     shutil.copy2(solvated_gro, root_solvated_gro)
                     shutil.copy2(solvated_top, root_solvated_top)
-                    result.output_pdb  = str(root_solvated_gro)
+                    result.output_pdb = str(root_solvated_gro)
                     result.solvated_top = str(root_solvated_top)
                     click.echo(f"  Solvation done  →  {root_solvated_gro.name}")
 
@@ -290,11 +301,21 @@ class MinimizeSimulator:
     ) -> Path:
         """Resize the simulation box using ``gmx editconf``."""
         out_gro = out_dir / "resized.gro"
-        dim_str = " ".join(str(d) for d in dimensions)
+        " ".join(str(d) for d in dimensions)
         subprocess.run(
-            ["gmx", "editconf", "-f", str(gro_path), "-o", str(out_gro),
-             "-box", *[str(d) for d in dimensions]],
-            check=True, capture_output=True, text=True,
+            [
+                "gmx",
+                "editconf",
+                "-f",
+                str(gro_path),
+                "-o",
+                str(out_gro),
+                "-box",
+                *[str(d) for d in dimensions],
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
         )
         return out_gro
 
@@ -319,6 +340,7 @@ class MinimizeSimulator:
         # a99SBdisp / DES-AMBER / amber03wsc → tip4p
         # amber99sb-ildn / amber14sb / charmm36m → spc216
         from ..forcefield.registry import get_force_field
+
         ff_info = get_force_field(self.config.forcefield_type)
         solvate_cs = ff_info.solvate_cs if ff_info else "spc216"
         log.info(f"  Solvating with -cs {solvate_cs} ({self.config.forcefield_type})")
@@ -327,15 +349,29 @@ class MinimizeSimulator:
         system_gro = solvate_dir / "system.gro"
         subprocess.run(
             ["gmx", "editconf", "-f", structure_pdb, "-o", str(system_gro)],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         )
 
         # solvate with the force-field-specific solvent coordinate file
         solvated_gro = str(solvate_dir / "solvated.gro")
         subprocess.run(
-            ["gmx", "solvate", "-cp", str(system_gro), "-o", solvated_gro,
-             "-cs", solvate_cs, "-p", topology_top],
-            check=True, capture_output=True, text=True,
+            [
+                "gmx",
+                "solvate",
+                "-cp",
+                str(system_gro),
+                "-o",
+                solvated_gro,
+                "-cs",
+                solvate_cs,
+                "-p",
+                topology_top,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
         )
 
         # Copy topology and force field folder into solvate_dir so that
@@ -345,6 +381,7 @@ class MinimizeSimulator:
         shutil.copy2(topology_top, local_top)
         try:
             from ..forcefield.registry import get_force_field_path
+
             ff_path = get_force_field_path(self.config.forcefield_type)
             if ff_path:
                 ff_dest = solvate_dir / Path(ff_path).name
@@ -358,17 +395,48 @@ class MinimizeSimulator:
         em_mdp.write_text("integrator = steep\nnsteps = 0\n")
         ions_tpr = str(solvate_dir / "ions.tpr")
         subprocess.run(
-            ["gmx", "grompp", "-f", "ions.mdp", "-c", solvated_gro,
-             "-p", str(local_top), "-o", ions_tpr, "-maxwarn", "5"],
-            check=True, capture_output=True, text=True,
+            [
+                "gmx",
+                "grompp",
+                "-f",
+                "ions.mdp",
+                "-c",
+                solvated_gro,
+                "-p",
+                str(local_top),
+                "-o",
+                ions_tpr,
+                "-maxwarn",
+                "5",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
             cwd=str(solvate_dir),
         )
         ionized_gro = str(solvate_dir / "ionized.gro")
         subprocess.run(
-            ["gmx", "genion", "-s", ions_tpr, "-o", ionized_gro,
-             "-p", str(local_top), "-pname", "NA", "-nname", "CL",
-             "-conc", str(ion_concentration), "-neutral"],
-            input="SOL\n", check=True, capture_output=True, text=True,
+            [
+                "gmx",
+                "genion",
+                "-s",
+                ions_tpr,
+                "-o",
+                ionized_gro,
+                "-p",
+                str(local_top),
+                "-pname",
+                "NA",
+                "-nname",
+                "CL",
+                "-conc",
+                str(ion_concentration),
+                "-neutral",
+            ],
+            input="SOL\n",
+            check=True,
+            capture_output=True,
+            text=True,
             cwd=str(solvate_dir),
         )
         return Path(ionized_gro), Path(local_top)
@@ -384,9 +452,22 @@ class MinimizeSimulator:
         droplet_dir.mkdir(parents=True, exist_ok=True)
         out_gro = str(droplet_dir / "droplet.gro")
         subprocess.run(
-            ["gmx", "editconf", "-f", pdb_path, "-o", out_gro,
-             "-c", "-d", str(distance), "-bt", box_type],
-            check=True, capture_output=True, text=True,
+            [
+                "gmx",
+                "editconf",
+                "-f",
+                pdb_path,
+                "-o",
+                out_gro,
+                "-c",
+                "-d",
+                str(distance),
+                "-bt",
+                box_type,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
         )
         return out_gro
 
@@ -403,12 +484,14 @@ class MinimizeSimulator:
         environment visible to the parent is used without any re-discovery issues.
         """
         from ..forcefield.registry import get_force_field as _get_ff
+
         ff_info = _get_ff(self.config.forcefield_type)
         ff_type = ff_info.family.lower() if ff_info else "amber"
         ff_name = ff_info.pdb2gmx_name if ff_info else self.config.forcefield_type
-        device  = self.config.platform.lower()
+        device = self.config.platform.lower()
 
         from .openmm_runner import run_minimization
+
         run_minimization(
             input_gro=structure_gro,
             input_top=topology_top,
@@ -434,11 +517,11 @@ class MinimizeSimulator:
     def _resolve_ff_name(self, forcefield_type: str) -> str:
         """Convert registry key (e.g. '1-a99SBdisp') to pdb2gmx name (e.g. 'a99SBdisp')."""
         from ..forcefield.registry import get_force_field
-        
+
         ff = get_force_field(forcefield_type)
         if ff:
             return ff.pdb2gmx_name
-        
+
         # Fallback: strip leading numeric prefix
         parts = forcefield_type.split("-", 1)
         return parts[-1] if len(parts) > 1 else forcefield_type
@@ -446,6 +529,7 @@ class MinimizeSimulator:
     def _get_ff_path(self) -> Optional[str]:
         try:
             from ..forcefield.registry import get_force_field_path
+
             return get_force_field_path(self.config.forcefield_type)
         except Exception:
             return None

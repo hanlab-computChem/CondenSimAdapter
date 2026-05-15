@@ -14,94 +14,110 @@ import click_option_group as cog
 
 from ..shared import (
     CG_FORCE_FIELDS,
-    CG_FF_ALIASES,
     GEOMETRY_DEFAULTS,
-    normalize_cg_ff,
-    validate_cg_force_field,
-    parse_component_pattern,
-    parse_box,
     generate_yaml_with_comments,
+    parse_box,
+    parse_component_pattern,
+    validate_cg_force_field,
 )
 
 
-@click.command('init', context_settings={'help_option_names': ['-h', '--help'], 'allow_extra_args': True})
-@cog.optgroup.group(name="Component Options", help="Force field, component type, and molecule count settings")
+@click.command(
+    "init", context_settings={"help_option_names": ["-h", "--help"], "allow_extra_args": True}
+)
+@cog.optgroup.group(
+    name="Component Options", help="Force field, component type, and molecule count settings"
+)
 @cog.optgroup.option(
-    '--ff', '-ff',
+    "--ff",
+    "-ff",
     type=str,
-    default='calvados',
+    default="calvados",
     callback=validate_cg_force_field,
     is_eager=True,
-    help=f"Force field. One of: {', '.join(CG_FORCE_FIELDS)}. Default: calvados (auto-selects CALVADOS2/3 based on components)"
+    help=f"Force field. One of: {', '.join(CG_FORCE_FIELDS)}. Default: calvados (auto-selects CALVADOS2/3 based on components)",
 )
 @cog.optgroup.option(
-    '--type',
-    type=click.Choice(['idp', 'mdp', 'mixed']),
-    default='idp',
-    help='Component type (default: idp). Overridden by --components if provided.'
+    "--type",
+    type=click.Choice(["idp", "mdp", "mixed"]),
+    default="idp",
+    help="Component type (default: idp). Overridden by --components if provided.",
 )
 @cog.optgroup.option(
-    '--components', '-c',
+    "--components",
+    "-c",
     type=str,
     default=None,
-    help='Component pattern (e.g., "IIIMII" = 3 IDP + 1 MDP + 2 IDP). Overrides --type.'
+    help='Component pattern (e.g., "IIIMII" = 3 IDP + 1 MDP + 2 IDP). Overrides --type.',
 )
 @cog.optgroup.option(
-    '--nmol', '-n',
+    "--nmol",
+    "-n",
     type=int,
     default=10,
-    help='Number of molecules per component (default: 10). For mixed, use "-n A B".'
+    help='Number of molecules per component (default: 10). For mixed, use "-n A B".',
 )
 @cog.optgroup.group(name="Topology Options", help="Geometry type and box dimensions")
 @cog.optgroup.option(
-    '--topol', '-tp',
-    type=click.Choice(['grid', 'slab', 'droplet']),
-    default='grid',
-    help='Topology/geometry type (default: grid)'
+    "--topol",
+    "-tp",
+    type=click.Choice(["grid", "slab", "droplet"]),
+    default="grid",
+    help="Topology/geometry type (default: grid)",
 )
 @cog.optgroup.option(
-    '--box', '-b',
+    "--box",
+    "-b",
     nargs=3,
     type=float,
     default=None,
-    help='Box dimensions (e.g., "-b 20 20 20" for grid/slab)'
+    help='Box dimensions (e.g., "-b 20 20 20" for grid/slab)',
 )
 @cog.optgroup.option(
-    '--radius', '-r',
+    "--radius",
+    "-r",
     type=float,
     default=None,
-    help='Droplet radius in nm (only needed for droplet geometry, overrides --box)'
+    help="Droplet radius in nm (only needed for droplet geometry, overrides --box)",
 )
-@cog.optgroup.group(name="Simulation Options", help="Simulation parameters: time, temperature, and ionic strength")
+@cog.optgroup.group(
+    name="Simulation Options", help="Simulation parameters: time, temperature, and ionic strength"
+)
 @cog.optgroup.option(
-    '--time', '-t',
+    "--time",
+    "-t",
     type=float,
     default=1000.0,
-    help='Simulation time in nanoseconds (default: 1000 ns)'
+    help="Simulation time in nanoseconds (default: 1000 ns)",
 )
 @cog.optgroup.option(
-    '--temperature', '-T',
-    type=float,
-    default=310.0,
-    help='Temperature in Kelvin (default: 310 K)'
+    "--temperature", "-T", type=float, default=310.0, help="Temperature in Kelvin (default: 310 K)"
 )
 @cog.optgroup.option(
-    '--ionic', '-I',
-    type=float,
-    default=0.15,
-    help='Ionic strength in Molar (default: 0.15 M)'
+    "--ionic", "-I", type=float, default=0.15, help="Ionic strength in Molar (default: 0.15 M)"
 )
 @cog.optgroup.group(name="Output Options", help="Output file and system name settings")
 @cog.optgroup.option(
-    '--name',
+    "--name",
     type=str,
-    default='my_simulation',
-    help='System name and output filename (default: my_simulation)'
+    default="my_simulation",
+    help="System name and output filename (default: my_simulation)",
 )
 @click.pass_context
-def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, nmol: int,
-                 time: float, components: Optional[str], box: Optional[tuple],
-                 radius: Optional[float], temperature: float, ionic: float):
+def init_command(
+    ctx: click.Context,
+    name: str,
+    ff: str,
+    type: str,
+    topol: str,
+    nmol: int,
+    time: float,
+    components: Optional[str],
+    box: Optional[tuple],
+    radius: Optional[float],
+    temperature: float,
+    ionic: float,
+):
     """\b
     Initialize a new CG simulation configuration template.
 
@@ -121,7 +137,7 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
         if components:
             click.echo("Error: Unexpected extra arguments.", err=True)
             sys.exit(1)
-        if type == 'mixed' and len(extra_args) == 1:
+        if type == "mixed" and len(extra_args) == 1:
             try:
                 nmol_mixed = (nmol, int(extra_args[0]))
                 extra_args = []
@@ -135,27 +151,29 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
         nmol_mixed = None
 
     # Get geometry defaults
-    geom_defaults = GEOMETRY_DEFAULTS.get(topol, GEOMETRY_DEFAULTS['grid'])
-    
+    geom_defaults = GEOMETRY_DEFAULTS.get(topol, GEOMETRY_DEFAULTS["grid"])
+
     # Handle radius parameter for droplet geometry
     if radius is not None:
-        if topol != 'droplet':
-            click.echo(f"Warning: --radius is only applicable for droplet topology. Ignoring.", err=True)
-            box_values = parse_box(box, topol, geom_defaults['box'])
+        if topol != "droplet":
+            click.echo(
+                "Warning: --radius is only applicable for droplet topology. Ignoring.", err=True
+            )
+            box_values = parse_box(box, topol, geom_defaults["box"])
         else:
             # For droplet: box = [2*r, 2*r, 2*r]
             box_values = [2 * radius, 2 * radius, 2 * radius]
     else:
         # Parse box (use provided or default based on geometry)
         try:
-            box_values = parse_box(box, topol, geom_defaults['box'])
+            box_values = parse_box(box, topol, geom_defaults["box"])
         except ValueError as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(1)
-    
+
     # Calculate steps from time (1 ns = 100,000 steps, 1 step = 10 fs)
     steps = int(time * 100000)
-    
+
     # Build component list
     component_list = []
     if components:
@@ -168,24 +186,28 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
             sys.exit(1)
     else:
         # Use --type (backward compatibility)
-        if type == 'idp':
-            component_list.append({
-                'name': 'protein_A',
-                'type': 'IDP',
-                'nmol': nmol,
-                'ffasta': 'input/protein_A.fasta',
-            })
+        if type == "idp":
+            component_list.append(
+                {
+                    "name": "protein_A",
+                    "type": "IDP",
+                    "nmol": nmol,
+                    "ffasta": "input/protein_A.fasta",
+                }
+            )
             component_note = "IDP (requires FASTA file)"
-        elif type == 'mdp':
-            component_list.append({
-                'name': 'protein_A',
-                'type': 'MDP',
-                'nmol': nmol,
-                'fpdb': 'input/protein_A.pdb',
-                'restraint': True,
-                'restraint_type': 'harmonic',
-                'charge_termini': 'both',
-            })
+        elif type == "mdp":
+            component_list.append(
+                {
+                    "name": "protein_A",
+                    "type": "MDP",
+                    "nmol": nmol,
+                    "fpdb": "input/protein_A.pdb",
+                    "restraint": True,
+                    "restraint_type": "harmonic",
+                    "charge_termini": "both",
+                }
+            )
             component_note = "MDP (requires PDB file, add fdomains in YAML)"
         else:  # mixed
             if nmol_mixed:
@@ -193,27 +215,32 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
             else:
                 nmol_idp = nmol
                 nmol_mdp = nmol
-            component_list.extend([
-                {
-                    'name': 'protein_A',
-                    'type': 'IDP',
-                    'nmol': nmol_idp,
-                    'ffasta': 'input/protein_A.fasta',
-                },
-                {
-                    'name': 'protein_B',
-                    'type': 'MDP',
-                    'nmol': nmol_mdp,
-                    'fpdb': 'input/protein_B.pdb',
-                    'restraint': True,
-                    'restraint_type': 'harmonic',
-                    'charge_termini': 'both',
-                },
-            ])
+            component_list.extend(
+                [
+                    {
+                        "name": "protein_A",
+                        "type": "IDP",
+                        "nmol": nmol_idp,
+                        "ffasta": "input/protein_A.fasta",
+                    },
+                    {
+                        "name": "protein_B",
+                        "type": "MDP",
+                        "nmol": nmol_mdp,
+                        "fpdb": "input/protein_B.pdb",
+                        "restraint": True,
+                        "restraint_type": "harmonic",
+                        "charge_termini": "both",
+                    },
+                ]
+            )
             component_note = "Mixed IDP + MDP"
-    
+
     # Create config
-    from ...core.config import CGConfig as CGSimulationConfig, Component as CGComponent, TopologyType, SimulationParams
+    from ...core.config import CGConfig as CGSimulationConfig
+    from ...core.config import Component as CGComponent
+    from ...core.config import SimulationParams, TopologyType
+
     # CLI name 'grid' maps to the internal TopologyType 'cubic'
     _topol_internal = {"grid": "cubic"}.get(topol, topol)
     config = CGSimulationConfig(
@@ -229,22 +256,24 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
             wfreq=5000,
         ),
     )
-    
+
     # Output path (current directory)
-    config_file = Path(f'{name}.yaml')
-    
+    config_file = Path(f"{name}.yaml")
+
     # Ensure output directory exists
     config_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Generate YAML with enhanced comments
-    yaml_content = generate_yaml_with_comments(config, topol, geom_defaults['description'], time, component_list, ff, radius)
-    
+    yaml_content = generate_yaml_with_comments(
+        config, topol, geom_defaults["description"], time, component_list, ff, radius
+    )
+
     # Write to file
-    with open(config_file, 'w') as f:
+    with open(config_file, "w") as f:
         f.write(yaml_content)
-    
+
     click.echo(f"\n{'=' * 60}")
-    click.echo(f"Configuration template created successfully!")
+    click.echo("Configuration template created successfully!")
     click.echo(f"{'=' * 60}")
     click.echo(f"\n  File: {config_file}")
     click.echo(f"  System: {name}")
@@ -255,14 +284,14 @@ def init_command(ctx: click.Context, name: str, ff: str, type: str, topol: str, 
     click.echo(f"  Ionic: {ionic} M")
     click.echo(f"  Time: {time} ns ({steps:,} steps)")
     click.echo(f"  Components: {len(component_list)} ({component_note})")
-    if type == 'mixed' and nmol_mixed:
+    if type == "mixed" and nmol_mixed:
         click.echo(f"  Molecules per component: IDP={nmol_mixed[0]}, MDP={nmol_mixed[1]}")
     else:
         click.echo(f"  Molecules per component: {nmol}")
-    
-    click.echo(f"\n  Next steps:")
+
+    click.echo("\n  Next steps:")
     click.echo(f"    1. Edit {config_file} (especially fdomains for MDP components)")
-    click.echo(f"    2. Add your input files (FASTA/PDB) to 'input/' directory")
+    click.echo("    2. Add your input files (FASTA/PDB) to 'input/' directory")
     click.echo(f"    3. Run: adapter cg -f {config_file} [options]")
-    click.echo(f"       (use 'adapter cg -h' to see available options)")
+    click.echo("       (use 'adapter cg -h' to see available options)")
     click.echo()

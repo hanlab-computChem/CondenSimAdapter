@@ -1,4 +1,5 @@
 import sys
+
 # this code make sure all resid always start with 1
 # resid between adjacent residues differ by 1
 
@@ -13,9 +14,9 @@ for rl in f:
         if rid_last!= Value:
          rid_cnt+=1
          rid_last = Value
-    
 
-    
+
+
     if rl.startswith("ATOM"):
         print( rl[:22]+"%4d"%rid_cnt + rl[26:-1])
     else:

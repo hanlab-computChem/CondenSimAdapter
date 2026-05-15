@@ -78,8 +78,9 @@ class Backmapper:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         if not Path(cg_pdb).exists():
-            return BackmapResult(success=False, input_pdb=cg_pdb,
-                                 error=f"Input file not found: {cg_pdb}")
+            return BackmapResult(
+                success=False, input_pdb=cg_pdb, error=f"Input file not found: {cg_pdb}"
+            )
 
         if model_type not in SUPPORTED_MODELS:
             log.warning(
@@ -94,16 +95,17 @@ class Backmapper:
         effective_fix = fix_atom
         if fix_atom and model_type == "CalphaBasedModel":
             from .cg2all.lib.libconfig import MODEL_HOME
+
             fix_ckpt = MODEL_HOME / "CalphaBasedModel-FIX.ckpt"
             if not fix_ckpt.exists():
                 log.info(
-                    "CalphaBasedModel-FIX.ckpt not found; "
-                    "using normal checkpoint (fix_atom=False)."
+                    "CalphaBasedModel-FIX.ckpt not found; using normal checkpoint (fix_atom=False)."
                 )
                 effective_fix = False
 
         try:
             from .cg2all import convert_cg2all
+
             convert_cg2all(
                 in_pdb_fn=cg_pdb,
                 out_fn=output_pdb,
@@ -137,6 +139,7 @@ class Backmapper:
 # ---------------------------------------------------------------------------
 # Slab geometry helper
 # ---------------------------------------------------------------------------
+
 
 def _center_slab_in_z(pdb_path: str) -> str:
     """Re-centre a slab PDB so the protein COM sits at box_z/2.
@@ -180,8 +183,8 @@ def _center_slab_in_z(pdb_path: str) -> str:
 
         offset = box_z_ang / 2.0 - z_com
         log.info(
-            f"  Slab z-centering: COM_z={z_com/10:.2f} nm  "
-            f"box_z={box_z_ang/10:.2f} nm  offset={offset/10:+.2f} nm"
+            f"  Slab z-centering: COM_z={z_com / 10:.2f} nm  "
+            f"box_z={box_z_ang / 10:.2f} nm  offset={offset / 10:+.2f} nm"
         )
 
         positions = u.atoms.positions.copy()

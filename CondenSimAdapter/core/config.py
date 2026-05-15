@@ -6,11 +6,11 @@ Protein-only: IDP (intrinsically disordered) and MDP (multi-domain with folded r
 
 from __future__ import annotations
 
-import yaml
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
+
+import yaml
 
 
 def _parse_bool(value) -> bool:
@@ -23,35 +23,36 @@ def _parse_bool(value) -> bool:
 
 
 class ComponentType(Enum):
-    IDP = "IDP"   # intrinsically disordered protein
-    MDP = "MDP"   # multi-domain protein with folded regions
+    IDP = "IDP"  # intrinsically disordered protein
+    MDP = "MDP"  # multi-domain protein with folded regions
 
 
 class TopologyType(Enum):
-    SLAB    = "slab"
+    SLAB = "slab"
     DROPLET = "droplet"
-    CUBIC   = "cubic"
+    CUBIC = "cubic"
 
 
 class ForceField(Enum):
     CALVADOS2 = "calvados2"
     CALVADOS3 = "calvados3"
-    HPS       = "hps"
-    COCOMO    = "cocomo"
-    MPIPI     = "mpipi"
+    HPS = "hps"
+    COCOMO = "cocomo"
+    MPIPI = "mpipi"
 
 
 @dataclass
 class Component:
     """A single protein component (one species, possibly multiple copies)."""
+
     name: str
     comp_type: ComponentType
     nmol: int = 1
 
     # Sequence / structure input -- at least one required
-    sequence: Optional[str] = None        # one-letter amino acid sequence
-    fasta_path: Optional[str] = None      # path to FASTA file
-    pdb_path: Optional[str] = None        # required for MDP; CA template
+    sequence: Optional[str] = None  # one-letter amino acid sequence
+    fasta_path: Optional[str] = None  # path to FASTA file
+    pdb_path: Optional[str] = None  # required for MDP; CA template
 
     # Folded domains: list of (start, end) 1-based inclusive residue ranges
     folded_domains: List[Tuple[int, int]] = field(default_factory=list)
@@ -60,9 +61,7 @@ class Component:
         if self.nmol < 1:
             raise ValueError(f"Component '{self.name}': nmol must be >= 1, got {self.nmol}")
         if self.comp_type == ComponentType.MDP and not (self.pdb_path or self.sequence):
-            raise ValueError(
-                f"Component '{self.name}': MDP type requires pdb_path or sequence"
-            )
+            raise ValueError(f"Component '{self.name}': MDP type requires pdb_path or sequence")
 
     def get_sequence(self) -> str:
         if self.sequence:
@@ -91,13 +90,13 @@ class Component:
 
 @dataclass
 class SimulationParams:
-    steps: int    = 100_000_000
-    dt: float     = 0.01          # ps
-    wfreq: int    = 10_000
+    steps: int = 100_000_000
+    dt: float = 0.01  # ps
+    wfreq: int = 10_000
     log_freq: int = 1_000_000
-    friction: float = 0.01        # ps^-1
+    friction: float = 0.01  # ps^-1
     platform: str = "CUDA"
-    gpu_id: int   = 0
+    gpu_id: int = 0
 
     def __post_init__(self):
         if self.steps <= 0:
@@ -112,34 +111,35 @@ class SimulationParams:
     @classmethod
     def from_dict(cls, d: dict) -> SimulationParams:
         return cls(
-            steps   = int(d.get("steps", 100_000_000)),
-            dt      = float(d.get("dt", 0.01)),
-            wfreq   = int(d.get("wfreq", 10_000)),
-            log_freq= int(d.get("log_freq", 1_000_000)),
-            friction= float(d.get("friction", 0.01)),
-            platform= d.get("platform", "CUDA"),
-            gpu_id  = int(d.get("gpu_id", 0)),
+            steps=int(d.get("steps", 100_000_000)),
+            dt=float(d.get("dt", 0.01)),
+            wfreq=int(d.get("wfreq", 10_000)),
+            log_freq=int(d.get("log_freq", 1_000_000)),
+            friction=float(d.get("friction", 0.01)),
+            platform=d.get("platform", "CUDA"),
+            gpu_id=int(d.get("gpu_id", 0)),
         )
 
 
 @dataclass
 class CGConfig:
     """Complete configuration for one CG simulation run."""
+
     system_name: str
-    force_field: str                    # ForceField.value string
+    force_field: str  # ForceField.value string
     components: List[Component]
-    box: List[float]                    # [Lx, Ly, Lz] in nm
+    box: List[float]  # [Lx, Ly, Lz] in nm
     topology: TopologyType
-    temperature: float     = 300.0     # K
-    ionic_strength: float  = 0.15      # M
+    temperature: float = 300.0  # K
+    ionic_strength: float = 0.15  # M
     simulation: SimulationParams = field(default_factory=SimulationParams)
 
     # Slab-specific (default: 0.6 * Lz, assuming z is the long axis)
-    slab_width: Optional[float] = None   # nm, defaults to 0.6 * box[2] if None
+    slab_width: Optional[float] = None  # nm, defaults to 0.6 * box[2] if None
 
     # Droplet-specific
-    droplet_radius: Optional[float] = None   # nm
-    droplet_k: float = 1.0                   # kJ/mol/nm^2 (confinement spring)
+    droplet_radius: Optional[float] = None  # nm
+    droplet_k: float = 1.0  # kJ/mol/nm^2 (confinement spring)
 
     # Entanglement check (runs after production MD on final.pdb)
     check_entanglement: bool = True
@@ -164,9 +164,7 @@ class CGConfig:
             raise ValueError("components list cannot be empty")
         valid_ff = {e.value for e in ForceField} | self._FF_ALIASES
         if self.force_field not in valid_ff:
-            raise ValueError(
-                f"force_field '{self.force_field}' not in {sorted(valid_ff)}"
-            )
+            raise ValueError(f"force_field '{self.force_field}' not in {sorted(valid_ff)}")
         if self.droplet_radius is not None and self.droplet_radius <= 0:
             raise ValueError(f"droplet_radius must be > 0, got {self.droplet_radius}")
 
@@ -204,19 +202,19 @@ class CGConfig:
         box_raw = d.get("box", [20.0, 20.0, 20.0])
         sim_raw = d.get("simulation", {})
         return cls(
-            system_name   = d.get("system_name", d.get("sysname", "system")),
-            force_field   = d.get("force_field", d.get("ff", "calvados")).lower(),
-            components    = components,
-            box           = [float(x) for x in box_raw],
-            topology      = TopologyType(topol_str),
-            temperature   = float(d.get("temperature", d.get("temp", 300.0))),
-            ionic_strength= float(d.get("ionic_strength", d.get("ionic", 0.15))),
-            simulation    = SimulationParams.from_dict(sim_raw),
-            slab_width          = float(d["slab_width"]) if "slab_width" in d else None,
-            droplet_radius      = d.get("droplet_radius"),
-            droplet_k           = float(d.get("droplet_k", 1.0)),
-            check_entanglement  = _parse_bool(d.get("check_entanglement", True)),
-            z1plus_executable   = d.get("z1plus_executable") or None,
+            system_name=d.get("system_name", d.get("sysname", "system")),
+            force_field=d.get("force_field", d.get("ff", "calvados")).lower(),
+            components=components,
+            box=[float(x) for x in box_raw],
+            topology=TopologyType(topol_str),
+            temperature=float(d.get("temperature", d.get("temp", 300.0))),
+            ionic_strength=float(d.get("ionic_strength", d.get("ionic", 0.15))),
+            simulation=SimulationParams.from_dict(sim_raw),
+            slab_width=float(d["slab_width"]) if "slab_width" in d else None,
+            droplet_radius=d.get("droplet_radius"),
+            droplet_k=float(d.get("droplet_k", 1.0)),
+            check_entanglement=_parse_bool(d.get("check_entanglement", True)),
+            z1plus_executable=d.get("z1plus_executable") or None,
         )
 
     @classmethod
@@ -238,12 +236,13 @@ class SimulationResult:
     # Entanglement check results (populated when check_entanglement=True)
     entanglement_mean_z: Optional[float] = None
     entanglement_max_z: Optional[float] = None
-    entanglement_method: Optional[str] = None   # "builtin" or "z1plus"
+    entanglement_method: Optional[str] = None  # "builtin" or "z1plus"
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _read_fasta(path: str, name: Optional[str] = None) -> str:
     """Read a single protein sequence from a FASTA file."""
@@ -269,9 +268,11 @@ def _read_fasta(path: str, name: Optional[str] = None) -> str:
 def _seq_from_pdb(pdb_path: str) -> str:
     """Extract CA-only sequence from a PDB file using MDAnalysis."""
     import MDAnalysis as mda
+
     u = mda.Universe(pdb_path)
     ca = u.select_atoms("name CA")
     from MDAnalysis.lib.util import convert_aa_code
+
     seq = ""
     for res in ca.residues:
         try:

@@ -10,7 +10,7 @@ from .residue_constants import (
     BOND_ANGLE0,
     TORSION_ANGLE0,
 )
-from .torch_basics import v_size, v_norm_safe, inner_product, torsion_angle, pi
+from .torch_basics import v_size, v_norm_safe, inner_product, pi
 
 
 def rmsd_CA(R, R_ref):

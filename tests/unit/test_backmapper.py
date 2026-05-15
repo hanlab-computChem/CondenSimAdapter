@@ -10,24 +10,24 @@ Tests cover:
 
 from __future__ import annotations
 
-import numpy as np
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
+
+import pytest
 
 from CondenSimAdapter.backmap.backmapper import (
+    SUPPORTED_MODELS,
     Backmapper,
     BackmapResult,
-    SUPPORTED_MODELS,
     _center_slab_in_z,
     _fix_c_terminus_atom_names,
     _insert_ter_after_oxt,
 )
 
-
 # =============================================================================
 # Backmapper Initialization and Basic Tests
 # =============================================================================
+
 
 class TestBackmapperBasics:
     """Tests for Backmapper basic functionality."""
@@ -47,6 +47,7 @@ class TestBackmapperBasics:
 # Input Validation Tests
 # =============================================================================
 
+
 class TestBackmapperInputValidation:
     """Tests for input validation."""
 
@@ -64,11 +65,13 @@ class TestBackmapperInputValidation:
         """Test unsupported model type logs warning."""
         # Create dummy input file
         input_pdb = tmp_path / "input.pdb"
-        input_pdb.write_text("ATOM    1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00           C\n")
-        
+        input_pdb.write_text(
+            "ATOM    1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00           C\n"
+        )
+
         mapper = Backmapper()
-        with patch('CondenSimAdapter.backmap.backmapper.log') as mock_log:
-            result = mapper.run(
+        with patch("CondenSimAdapter.backmap.backmapper.log") as mock_log:
+            mapper.run(
                 cg_pdb=str(input_pdb),
                 output_dir=str(tmp_path / "output"),
                 model_type="UnsupportedModel",
@@ -80,6 +83,7 @@ class TestBackmapperInputValidation:
 # =============================================================================
 # Slab Z-Centering Tests
 # =============================================================================
+
 
 class TestCenterSlabInZ:
     """Tests for _center_slab_in_z helper."""
@@ -102,11 +106,11 @@ END
         """Test that slab centering shifts z coordinates."""
         pdb_path = tmp_path / "slab.pdb"
         pdb_path.write_text(slab_pdb_content)
-        
+
         result_path = _center_slab_in_z(str(pdb_path))
-        
+
         # Read result and check z values shifted
-        result_content = Path(result_path).read_text()
+        Path(result_path).read_text()
         # Original z values were around 40-44, box_z is 100
         # COM should move to 50 (box_z/2)
         assert result_path == str(pdb_path)  # Modifies in place
@@ -115,9 +119,9 @@ END
         """Test that CRYST1 record is preserved."""
         pdb_path = tmp_path / "slab.pdb"
         pdb_path.write_text(slab_pdb_content)
-        
+
         _center_slab_in_z(str(pdb_path))
-        
+
         result_content = Path(pdb_path).read_text()
         assert "CRYST1" in result_content
 
@@ -125,6 +129,7 @@ END
 # =============================================================================
 # C-Terminus Fix Tests
 # =============================================================================
+
 
 class TestFixCTerminusAtomNames:
     """Tests for _fix_c_terminus_atom_names helper."""
@@ -138,13 +143,13 @@ ATOM      3  OT2 ALA A   1       2.000   0.000   0.000  1.00  0.00           O
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         _fix_c_terminus_atom_names(str(pdb_path))
-        
+
         result = pdb_path.read_text()
         assert " OT1 " not in result
         assert " O   " in result  # OT1 -> O
-        assert " OXT" in result   # OT2 -> OXT
+        assert " OXT" in result  # OT2 -> OXT
 
     def test_no_c_terminus_unchanged(self, tmp_path):
         """Test file without C-terminus is unchanged."""
@@ -154,9 +159,9 @@ ATOM      2  N   ALA A   1       1.000   0.000   0.000  1.00  0.00           N
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         _fix_c_terminus_atom_names(str(pdb_path))
-        
+
         result = pdb_path.read_text()
         assert "CA" in result
         assert "N" in result
@@ -165,6 +170,7 @@ ATOM      2  N   ALA A   1       1.000   0.000   0.000  1.00  0.00           N
 # =============================================================================
 # TER Insertion Tests
 # =============================================================================
+
 
 class TestInsertTerAfterOxt:
     """Tests for _insert_ter_after_oxt helper."""
@@ -178,14 +184,14 @@ ATOM      3  CA  GLY A   2       2.000   0.000   0.000  1.00  0.00           C
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         _insert_ter_after_oxt(str(pdb_path))
-        
-        lines = pdb_path.read_text().strip().split('\n')
+
+        lines = pdb_path.read_text().strip().split("\n")
         assert "TER" in lines
         # TER should be between OXT and next CA
-        oxt_idx = [i for i, l in enumerate(lines) if "OXT" in l][0]
-        ter_idx = [i for i, l in enumerate(lines) if l == "TER"][0]
+        oxt_idx = [i for i, line in enumerate(lines) if "OXT" in line][0]
+        ter_idx = [i for i, line in enumerate(lines) if line == "TER"][0]
         assert ter_idx == oxt_idx + 1
 
     def test_no_ter_if_already_present(self, tmp_path):
@@ -198,17 +204,18 @@ ATOM      3  CA  GLY A   2       2.000   0.000   0.000  1.00  0.00           C
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         _insert_ter_after_oxt(str(pdb_path))
-        
-        lines = pdb_path.read_text().strip().split('\n')
-        ter_count = sum(1 for l in lines if l == "TER")
+
+        lines = pdb_path.read_text().strip().split("\n")
+        ter_count = sum(1 for line in lines if line == "TER")
         assert ter_count == 1  # Still only one TER
 
 
 # =============================================================================
 # BackmapResult Tests
 # =============================================================================
+
 
 class TestBackmapResult:
     """Tests for BackmapResult dataclass."""

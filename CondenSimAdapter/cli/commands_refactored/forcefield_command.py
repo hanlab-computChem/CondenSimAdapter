@@ -7,7 +7,7 @@ Manage custom all-atom force fields for adapter minimize workflow.
 
 import click
 
-from ...forcefield.registry import REGISTRY, BUILTIN_FORCE_FIELDS
+from ...forcefield.registry import BUILTIN_FORCE_FIELDS, REGISTRY
 
 
 @click.group("forcefield", context_settings={"help_option_names": ["-h", "--help"]})
@@ -77,7 +77,6 @@ def list_forcefields():
 def add_forcefield(ff_dir, pdb2gmx_name, family, water_model, solvate_cs, description):
     """Register a custom all-atom force field and assign an aN id."""
     family_normalized = family.upper()
-    gbsa_mapping = "AMBER99SB-ILDN" if family_normalized == "AMBER" else "CHARMM36"
     try:
         ff = REGISTRY.register_custom_force_field(
             ff_dir=ff_dir,

@@ -15,11 +15,11 @@ Architecture:
 
 from .core import (
     CGConfig,
+    CGSimulation,
     Component,
     ComponentType,
-    TopologyType,
     SimulationResult,
-    CGSimulation,
+    TopologyType,
     create_forcefield,
     list_forcefields,
 )

@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint format test test-unit test-integration test-coverage clean help
+.PHONY: install install-dev lint format test test-unit test-fast test-integration test-coverage clean help
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -14,18 +14,21 @@ install-minimal:  ## Install with core dependencies only (no ML/OpenMM)
 	pip install -e ".[minimal]"
 
 lint:  ## Run ruff linter and format check
-	ruff check CondenSimAdapter/ tests/
-	ruff format --check CondenSimAdapter/ tests/
+	python -m ruff check CondenSimAdapter/ tests/
+	python -m ruff format --check CondenSimAdapter/ tests/
 
 format:  ## Auto-format code with ruff
-	ruff format CondenSimAdapter/ tests/
-	ruff check --fix CondenSimAdapter/ tests/
+	python -m ruff format CondenSimAdapter/ tests/
+	python -m ruff check --fix CondenSimAdapter/ tests/
 
 test:  ## Run all tests
 	pytest -v
 
 test-unit:  ## Run unit tests only
 	pytest tests/unit/ -v
+
+test-fast:  ## Run fast unit tests (no GPU/GROMACS/slow)
+	pytest tests/unit/ -v -m "not slow and not gpu and not gmx" --no-header -q
 
 test-integration:  ## Run integration tests only
 	pytest tests/integration/ -v

@@ -9,21 +9,18 @@ Tests cover:
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 pytest.importorskip("openmm")
 
-import openmm as mm
 import openmm.app as app
-import openmm.unit as unit
 
 from CondenSimAdapter.core.forcefield.mpipi import (
-    MpipiFF,
-    _MPIPI_ORDER,
-    _N_MPIPI,
     _AA3_TO_MPIPI,
     _MPIPI_MASS,
+    _MPIPI_ORDER,
+    _N_MPIPI,
+    MpipiFF,
 )
 
 
@@ -71,15 +68,15 @@ class TestMpipiNonbondedForces:
         """Create a simple topology."""
         top = app.Topology()
         chain = top.addChain()
-        
+
         for res_name in ["ALA", "GLY", "ARG"]:
             res = top.addResidue(res_name, chain)
             top.addAtom("CA", app.element.carbon, res)
-        
+
         atoms = list(top.atoms())
         top.addBond(atoms[0], atoms[1])
         top.addBond(atoms[1], atoms[2])
-        
+
         return top
 
     @pytest.fixture
@@ -128,25 +125,29 @@ class TestMpipiFoldedSet:
 
     def test_no_domains_returns_empty(self):
         """Test empty folded domains returns empty set."""
-        chain_meta = [{
-            "name": "test",
-            "start": 0,
-            "end": 10,
-            "sequence": "AAAAAAAAAA",
-            "folded_domains": [],
-        }]
+        chain_meta = [
+            {
+                "name": "test",
+                "start": 0,
+                "end": 10,
+                "sequence": "AAAAAAAAAA",
+                "folded_domains": [],
+            }
+        ]
         folded = MpipiFF._get_folded_set(chain_meta)
         assert len(folded) == 0
 
     def test_single_domain(self):
         """Test single folded domain returns correct indices."""
-        chain_meta = [{
-            "name": "test",
-            "start": 0,
-            "end": 10,
-            "sequence": "AAAAAAAAAA",
-            "folded_domains": [(2, 5)],  # 1-based: atoms 1,2,3,4
-        }]
+        chain_meta = [
+            {
+                "name": "test",
+                "start": 0,
+                "end": 10,
+                "sequence": "AAAAAAAAAA",
+                "folded_domains": [(2, 5)],  # 1-based: atoms 1,2,3,4
+            }
+        ]
         folded = MpipiFF._get_folded_set(chain_meta)
         assert folded == {1, 2, 3, 4}
 
@@ -180,9 +181,11 @@ class TestMpipiConstants:
     def test_k_bond_value(self):
         """Test bond spring constant."""
         from CondenSimAdapter.core.forcefield.mpipi import _K_BOND
+
         assert _K_BOND == pytest.approx(8031.0, abs=1e-6)
 
     def test_d_idr_value(self):
         """Test IDR bond length."""
         from CondenSimAdapter.core.forcefield.mpipi import _D_IDR
+
         assert _D_IDR == pytest.approx(0.381, abs=1e-6)

@@ -9,10 +9,10 @@ for PACE-ASM force field. Output format is compatible with prepare_peptide.py
     - out/topol.top
 """
 
+import argparse
 import os
 import shutil
 import subprocess
-import argparse
 import sys
 from pathlib import Path
 
@@ -103,20 +103,20 @@ def main():
 
     # Copy necessary files to working directory
     print("\nStep 0: Setting up environment...")
-    
+
     # Helper to get script subdirectory
     scripts_dir = script_dir / "scripts"
-    
+
     # Copy files from scripts directory
     shutil.copy(scripts_dir / "residuetypes.dat", ".")
     shutil.copy(scripts_dir / "comb_top.py", ".")
-    
+
     # Copy MDP files
     mdp_dir = script_dir / "mdp"
     if mdp_dir.exists():
         for mdp_file in mdp_dir.glob("*"):
             shutil.copy(mdp_file, ".")
-    
+
     # Note: Force field files (pace-asm.ff) are already accessible from the current directory
     # since we're running in pace_asm_top_builder. No need to copy.
 
@@ -165,7 +165,7 @@ def main():
     print("\nStep 4: Processing topology with helper scripts...")
 
     # Change residue numbering
-    run_command([sys.executable, str(scripts_dir / "change_resid.py"), 
+    run_command([sys.executable, str(scripts_dir / "change_resid.py"),
                  f"{protein_name}-pace.pdb"], outfile=f"{protein_name}-pace-resid.pdb")
 
     # Get residue and atom counts
@@ -184,7 +184,7 @@ def main():
     genpair_script = scripts_dir / "genpair" / "genPairPACE"
     genpair_dir = scripts_dir / "genpair"
     genpair_c = genpair_dir / "genPairPACE.c"
-    
+
     if not genpair_script.exists() or genpair_script.stat().st_mtime < genpair_c.stat().st_mtime:
         print("  genPairPACE not compiled or source modified. Compiling now...")
         try:
@@ -193,7 +193,7 @@ def main():
         except subprocess.CalledProcessError as e:
             print(f"Error: Failed to compile genPairPACE: {e}")
             sys.exit(1)
-    
+
     if not genpair_script.exists():
         print(f"Error: genPairPACE not found at {genpair_script} after compilation attempt")
         sys.exit(1)
@@ -206,20 +206,20 @@ def main():
     ], outfile=f"{protein_name}-pace.patch")
 
     # Insert parameters
-    run_command([sys.executable, str(scripts_dir / "insert_param.py"), 
+    run_command([sys.executable, str(scripts_dir / "insert_param.py"),
                  f"{protein_name}-pace.patch", "draft.top"], outfile=f"{protein_name}-pace.top")
 
     # 6. Handle terminal modifications (using charged termini)
     print("  Processing terminal modifications for charged termini...")
     print(f"  DEBUG: count_residue = {count_residue}")
-    run_command([sys.executable, str(scripts_dir / "C-N-ter.py"), 
-                 f"{protein_name}-pace-resid.pdb", count_residue, 
+    run_command([sys.executable, str(scripts_dir / "C-N-ter.py"),
+                 f"{protein_name}-pace-resid.pdb", count_residue,
                  f"{protein_name}-pace.top", "both"], outfile=f"{protein_name}-pace-final.top")
 
     # 7. Handle position restraint file
     if os.path.exists("posre.itp"):
         shutil.move("posre.itp", f"posre_{protein_name}.itp")
-        run_command([sys.executable, str(scripts_dir / "rpl_posre.py"), 
+        run_command([sys.executable, str(scripts_dir / "rpl_posre.py"),
                      f"{protein_name}-pace-final.top", protein_name, f"{protein_name}-pace.top"])
 
     # 8. Organize final output files into the output directory
@@ -243,12 +243,12 @@ def main():
         "comb_top.py",
         "mdout.mdp",
     ]
-    
+
     # Also clean up MDP files that were copied
     if mdp_dir.exists():
         for mdp_file in mdp_dir.glob("*"):
             temp_files.append(mdp_file.name)
-    
+
     # Clean up force field directory
     if os.path.exists("pace-asm.ff"):
         import shutil as sh
@@ -265,7 +265,7 @@ def main():
             except OSError as e:
                 print(f"Error cleaning up file {f_path}: {e}")
 
-    print(f"\n--- PACE-ASM Preparation complete! ---")
+    print("\n--- PACE-ASM Preparation complete! ---")
     print(f"Final structure and topology files are located in: '{out_dir}'")
 
 

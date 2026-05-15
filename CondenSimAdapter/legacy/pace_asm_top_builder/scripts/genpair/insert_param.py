@@ -4,20 +4,20 @@ f = open(sys.argv[1], "r")
 
 for rl in f:
   if "exclusions" in rl:
-    break;
+    break
 
 excl=[]
 
 for rl in f:
   if "pairs" in rl:
-    break;
+    break
   excl.append(rl[:-1])
 
 pair=[]
 
 for rl in f:
   if "impropers" in rl:
-    break;
+    break
   pair.append(rl[:-1])
 
 imp=[]
@@ -55,6 +55,6 @@ for i in imp:
 
 for rl in f:
   print(rl, end="")
- 
+
 
 f.close()

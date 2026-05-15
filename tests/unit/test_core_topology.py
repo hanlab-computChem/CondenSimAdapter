@@ -11,22 +11,21 @@ Tests cover:
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from CondenSimAdapter.core.topology import (
-    build_topology,
-    get_masses,
-    get_folded_atom_ranges,
-    _box_vectors,
-    RESIDUE_MASS,
     ONE_TO_THREE,
+    RESIDUE_MASS,
     THREE_TO_ONE,
+    _box_vectors,
+    build_topology,
+    get_folded_atom_ranges,
+    get_masses,
 )
-
 
 # =============================================================================
 # Residue Constants Tests
 # =============================================================================
+
 
 class TestResidueConstants:
     """Tests for residue conversion tables."""
@@ -58,6 +57,7 @@ class TestResidueConstants:
 # Box Vectors Tests
 # =============================================================================
 
+
 class TestBoxVectors:
     """Tests for _box_vectors helper."""
 
@@ -86,31 +86,34 @@ class TestBoxVectors:
 # Build Topology Tests
 # =============================================================================
 
+
 class TestBuildTopology:
     """Tests for build_topology function."""
 
     def test_single_chain(self):
         """Test building topology for single chain."""
-        chain_meta = [{
-            "name": "FUS",
-            "start": 0,
-            "end": 5,
-            "sequence": "AGSVL",
-            "folded_domains": [],
-        }]
+        chain_meta = [
+            {
+                "name": "FUS",
+                "start": 0,
+                "end": 5,
+                "sequence": "AGSVL",
+                "folded_domains": [],
+            }
+        ]
         positions = np.zeros((5, 3), dtype=np.float64)
         box = [20.0, 20.0, 20.0]
-        
+
         top, pos_qty = build_topology(chain_meta, positions, box)
-        
+
         # Check topology structure
         assert top.getNumChains() == 1
         assert top.getNumResidues() == 5
         assert top.getNumAtoms() == 5
         assert top.getNumBonds() == 4  # 5 residues -> 4 bonds
-        
+
         # Check positions are wrapped in Quantity
-        assert hasattr(pos_qty, 'unit')
+        assert hasattr(pos_qty, "unit")
         assert pos_qty.shape == (5, 3)
 
     def test_multiple_chains(self):
@@ -121,9 +124,9 @@ class TestBuildTopology:
         ]
         positions = np.zeros((7, 3), dtype=np.float64)
         box = [20.0, 20.0, 20.0]
-        
+
         top, _ = build_topology(chain_meta, positions, box)
-        
+
         assert top.getNumChains() == 2
         assert top.getNumResidues() == 7
         assert top.getNumAtoms() == 7
@@ -132,18 +135,20 @@ class TestBuildTopology:
 
     def test_residue_names(self):
         """Test that residue names are set correctly from sequence."""
-        chain_meta = [{
-            "name": "test",
-            "start": 0,
-            "end": 3,
-            "sequence": "AGS",  # Ala-Gly-Ser
-            "folded_domains": [],
-        }]
+        chain_meta = [
+            {
+                "name": "test",
+                "start": 0,
+                "end": 3,
+                "sequence": "AGS",  # Ala-Gly-Ser
+                "folded_domains": [],
+            }
+        ]
         positions = np.zeros((3, 3))
         box = [10.0, 10.0, 10.0]
-        
+
         top, _ = build_topology(chain_meta, positions, box)
-        
+
         residues = list(top.residues())
         assert residues[0].name == "ALA"
         assert residues[1].name == "GLY"
@@ -151,18 +156,20 @@ class TestBuildTopology:
 
     def test_atom_names(self):
         """Test that all atoms are named CA."""
-        chain_meta = [{
-            "name": "test",
-            "start": 0,
-            "end": 5,
-            "sequence": "AAAAA",
-            "folded_domains": [],
-        }]
+        chain_meta = [
+            {
+                "name": "test",
+                "start": 0,
+                "end": 5,
+                "sequence": "AAAAA",
+                "folded_domains": [],
+            }
+        ]
         positions = np.zeros((5, 3))
         box = [10.0, 10.0, 10.0]
-        
+
         top, _ = build_topology(chain_meta, positions, box)
-        
+
         for atom in top.atoms():
             assert atom.name == "CA"
 
@@ -174,14 +181,14 @@ class TestBuildTopology:
         ]
         positions = np.zeros((4, 3))
         box = [10.0, 10.0, 10.0]
-        
+
         top, _ = build_topology(chain_meta, positions, box)
-        
+
         # Each chain should have 1 bond
         assert top.getNumBonds() == 2
-        
+
         # Verify bonds are within chains
-        atoms = list(top.atoms())
+        list(top.atoms())
         for bond in top.bonds():
             a1, a2 = bond[0], bond[1]
             # Atoms should be consecutive in the same chain
@@ -189,18 +196,20 @@ class TestBuildTopology:
 
     def test_periodic_box_set(self):
         """Test that periodic box vectors are set correctly."""
-        chain_meta = [{
-            "name": "test",
-            "start": 0,
-            "end": 3,
-            "sequence": "AAA",
-            "folded_domains": [],
-        }]
+        chain_meta = [
+            {
+                "name": "test",
+                "start": 0,
+                "end": 3,
+                "sequence": "AAA",
+                "folded_domains": [],
+            }
+        ]
         positions = np.zeros((3, 3))
         box = [25.0, 25.0, 25.0]
-        
+
         top, _ = build_topology(chain_meta, positions, box)
-        
+
         vectors = top.getPeriodicBoxVectors()
         assert vectors is not None
         v0, v1, v2 = vectors.value_in_unit(vectors.unit)
@@ -213,17 +222,20 @@ class TestBuildTopology:
 # Get Masses Tests
 # =============================================================================
 
+
 class TestGetMasses:
     """Tests for get_masses function."""
 
     def test_single_chain_masses(self):
         """Test mass calculation for single chain."""
-        chain_meta = [{
-            "name": "test",
-            "sequence": "AG",
-        }]
+        chain_meta = [
+            {
+                "name": "test",
+                "sequence": "AG",
+            }
+        ]
         masses = get_masses(chain_meta)
-        
+
         assert len(masses) == 2
         assert masses[0] == RESIDUE_MASS["A"]  # Alanine
         assert masses[1] == RESIDUE_MASS["G"]  # Glycine
@@ -235,7 +247,7 @@ class TestGetMasses:
             {"name": "B", "sequence": "GS"},
         ]
         masses = get_masses(chain_meta)
-        
+
         assert len(masses) == 3
         assert masses[0] == RESIDUE_MASS["A"]
         assert masses[1] == RESIDUE_MASS["G"]
@@ -243,12 +255,14 @@ class TestGetMasses:
 
     def test_unknown_residue_fallback(self):
         """Test that unknown residues get default mass."""
-        chain_meta = [{
-            "name": "test",
-            "sequence": "AXA",  # X is unknown
-        }]
+        chain_meta = [
+            {
+                "name": "test",
+                "sequence": "AXA",  # X is unknown
+            }
+        ]
         masses = get_masses(chain_meta)
-        
+
         assert len(masses) == 3
         assert masses[0] == RESIDUE_MASS["A"]
         assert masses[1] == 57.05  # Default (Glycine) mass
@@ -258,7 +272,7 @@ class TestGetMasses:
         """Test that return is numpy array of float64."""
         chain_meta = [{"name": "test", "sequence": "AAAA"}]
         masses = get_masses(chain_meta)
-        
+
         assert isinstance(masses, np.ndarray)
         assert masses.dtype == np.float64
 
@@ -267,37 +281,42 @@ class TestGetMasses:
 # Get Folded Atom Ranges Tests
 # =============================================================================
 
+
 class TestGetFoldedAtomRanges:
     """Tests for get_folded_atom_ranges function."""
 
     def test_single_domain(self):
         """Test single folded domain."""
-        chain_meta = [{
-            "name": "MDP1",
-            "start": 0,
-            "end": 100,
-            "sequence": "A" * 100,
-            "folded_domains": [(10, 30)],  # 1-based inclusive
-        }]
+        chain_meta = [
+            {
+                "name": "MDP1",
+                "start": 0,
+                "end": 100,
+                "sequence": "A" * 100,
+                "folded_domains": [(10, 30)],  # 1-based inclusive
+            }
+        ]
         ranges = get_folded_atom_ranges(chain_meta)
-        
+
         assert len(ranges) == 1
         # 10-30 (1-based) -> 9-30 (0-based, exclusive end)
         assert ranges[0] == (9, 30)
 
     def test_multiple_domains_single_chain(self):
         """Test multiple folded domains in one chain."""
-        chain_meta = [{
-            "name": "MDP1",
-            "start": 0,
-            "end": 200,
-            "sequence": "A" * 200,
-            "folded_domains": [(1, 50), (100, 150)],
-        }]
+        chain_meta = [
+            {
+                "name": "MDP1",
+                "start": 0,
+                "end": 200,
+                "sequence": "A" * 200,
+                "folded_domains": [(1, 50), (100, 150)],
+            }
+        ]
         ranges = get_folded_atom_ranges(chain_meta)
-        
+
         assert len(ranges) == 2
-        assert ranges[0] == (0, 50)    # 1-50 -> 0-50
+        assert ranges[0] == (0, 50)  # 1-50 -> 0-50
         assert ranges[1] == (99, 150)  # 100-150 -> 99-150
 
     def test_multiple_chains_with_domains(self):
@@ -319,7 +338,7 @@ class TestGetFoldedAtomRanges:
             },
         ]
         ranges = get_folded_atom_ranges(chain_meta)
-        
+
         assert len(ranges) == 2
         # Chain A: domain at 1-20, chain starts at 0 -> absolute 0-20
         assert ranges[0] == (0, 20)
@@ -328,15 +347,17 @@ class TestGetFoldedAtomRanges:
 
     def test_no_folded_domains(self):
         """Test chain with no folded domains."""
-        chain_meta = [{
-            "name": "IDP",
-            "start": 0,
-            "end": 50,
-            "sequence": "A" * 50,
-            "folded_domains": [],
-        }]
+        chain_meta = [
+            {
+                "name": "IDP",
+                "start": 0,
+                "end": 50,
+                "sequence": "A" * 50,
+                "folded_domains": [],
+            }
+        ]
         ranges = get_folded_atom_ranges(chain_meta)
-        
+
         assert ranges == []
 
     def test_mixed_chains(self):
@@ -358,6 +379,6 @@ class TestGetFoldedAtomRanges:
             },
         ]
         ranges = get_folded_atom_ranges(chain_meta)
-        
+
         assert len(ranges) == 1
         assert ranges[0] == (0, 50)

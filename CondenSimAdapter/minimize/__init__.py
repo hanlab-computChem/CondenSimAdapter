@@ -8,8 +8,8 @@ Provides:
   load_config_from_yaml / get_system_name -- shared YAML utilities
 """
 
-from .minimizer     import MinimizeSimulator, MinimizeConfig, MinimizeResult
-from .config_loader import load_config_from_yaml, get_system_name
+from .config_loader import get_system_name, load_config_from_yaml
+from .minimizer import MinimizeConfig, MinimizeResult, MinimizeSimulator
 
 __all__ = [
     "MinimizeSimulator",

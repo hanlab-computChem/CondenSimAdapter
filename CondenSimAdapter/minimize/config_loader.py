@@ -7,9 +7,10 @@ that were previously buried inside pdb2gmx_utils.py.
 
 from __future__ import annotations
 
-import yaml
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Tuple
+
+import yaml
 
 
 def load_config_from_yaml(yaml_path: str) -> Tuple[str, list]:

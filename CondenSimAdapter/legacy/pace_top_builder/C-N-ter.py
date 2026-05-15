@@ -35,7 +35,7 @@ f = open(sys.argv[3],'r')
 change_N = False
 change_C = False
 for rl in f:
-    
+
     if change_N and (sys.argv[4]=='Nter' or sys.argv[4]=='both'):
         sprl = rl.split()
         if set(sprl[:4]) == set(dih):
@@ -54,12 +54,12 @@ for rl in f:
 
     if ("dihedral" in rl) and change_N :
         change_C = True
-    
+
     if "; Include Position restraint file" in rl:
         change_C = False
 
     if "dihedral" in rl:
-        if change_N == False:
+        if not change_N:
             change_N = True
         else:
             change_N = False

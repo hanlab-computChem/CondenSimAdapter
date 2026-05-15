@@ -12,22 +12,26 @@ This registry supports numbered selection:
 """
 
 import json
+import logging
 import os
 import re
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Force Field Info Data Class
 # =============================================================================
 
+
 @dataclass
 class ForceFieldInfo:
     """Information about a force field.
-    
+
     Attributes:
         name: CLI name for the force field (short identifier with number)
         family: Force field family (AMBER or CHARMM)
@@ -37,6 +41,7 @@ class ForceFieldInfo:
         gbsa_mapping: GBSA atom type mapping to use
         description: Human-readable description
     """
+
     name: str
     family: str
     pdb2gmx_name: str
@@ -65,6 +70,7 @@ def _get_user_data_dir() -> Path:
         return Path(env_dir)
     try:
         from platformdirs import user_data_dir
+
         return Path(user_data_dir("CondenSimAdapter"))
     except ImportError:
         return Path.home() / ".config" / "CondenSimAdapter"
@@ -90,7 +96,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="a99SBdisp_water",
         solvate_cs="tip4p",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="a99SB-disp with custom water model"
+        description="a99SB-disp with custom water model",
     ),
     ForceFieldInfo(
         name="2-amber03wsc",
@@ -99,7 +105,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip4p2005s",
         solvate_cs="tip4p",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="AMBER03 with WSC correction and tip4p2005s water"
+        description="AMBER03 with WSC correction and tip4p2005s water",
     ),
     ForceFieldInfo(
         name="3-amber99sbws-stqp",
@@ -108,7 +114,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip4p2005s",
         solvate_cs="tip4p",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="AMBER99SB-WS with STQp correction and tip4p2005s water"
+        description="AMBER99SB-WS with STQp correction and tip4p2005s water",
     ),
     ForceFieldInfo(
         name="4-amber99sbws-stq",
@@ -117,7 +123,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip4p2005s",
         solvate_cs="tip4p",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="AMBER99SB-WS with stq correction and tip4p2005s water"
+        description="AMBER99SB-WS with stq correction and tip4p2005s water",
     ),
     ForceFieldInfo(
         name="5-des-amber",
@@ -126,7 +132,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip4pd",
         solvate_cs="tip4p",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="DES-AMBER with tip4pd water"
+        description="DES-AMBER with tip4pd water",
     ),
     ForceFieldInfo(
         name="6-des-amber-sf1.0",
@@ -135,7 +141,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip4pd",
         solvate_cs="tip4p",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="DES-AMBER SF1.0 with tip4pd water"
+        description="DES-AMBER SF1.0 with tip4pd water",
     ),
     ForceFieldInfo(
         name="7-amber99sb-ildn",
@@ -144,7 +150,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip3p",
         solvate_cs="spc216",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="AMBER99SB-ILDN with tip3p water (default)"
+        description="AMBER99SB-ILDN with tip3p water (default)",
     ),
     ForceFieldInfo(
         name="8-amber14sb",
@@ -153,9 +159,8 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip3p",
         solvate_cs="spc216",
         gbsa_mapping="AMBER99SB-ILDN",
-        description="AMBER14SB with PARMBSC1 correction and tip3p water"
+        description="AMBER14SB with PARMBSC1 correction and tip3p water",
     ),
-    
     # CHARMM family (numbered 9)
     ForceFieldInfo(
         name="9-charmm36m",
@@ -164,7 +169,7 @@ BUILTIN_FORCE_FIELDS = [
         water_model="tip3p",
         solvate_cs="spc216",
         gbsa_mapping="CHARMM36",
-        description="CHARMM36m-jul2021 with tip3p water"
+        description="CHARMM36m-jul2021 with tip3p water",
     ),
 ]
 
@@ -173,16 +178,17 @@ BUILTIN_FORCE_FIELDS = [
 # Force Field Registry
 # =============================================================================
 
+
 class ForceFieldRegistry:
     """Registry for managing available force fields.
-    
+
     This class provides a centralized way to:
     - List all available force fields
     - Get force field information by name (supports both "N-name" and "pdb2gmx_name")
     - Get water model for a force field
     - Validate force field names
     - Filter force fields by family
-    
+
     Examples:
         >>> registry = ForceFieldRegistry()
         >>> registry.list_force_fields()
@@ -194,7 +200,7 @@ class ForceFieldRegistry:
         >>> ff.water_model
         'a99SBdisp_water'
     """
-    
+
     def __init__(self):
         """Initialize the registry with built-in force fields."""
         self._force_fields: Dict[str, ForceFieldInfo] = {}
@@ -281,15 +287,32 @@ class ForceFieldRegistry:
         return ff
 
     def _save_custom_force_fields(self) -> None:
-        """Persist custom force fields to source-tree JSON index."""
+        """Persist custom force fields to source-tree JSON index.
+
+        Uses atomic write (temp file + rename) to avoid corrupting the index on
+        partial writes.
+        """
         CUSTOM_FORCEFIELD_INDEX.parent.mkdir(parents=True, exist_ok=True)
         records = [
             self._to_index_data(ff)
-            for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
+            for ff in sorted(
+                self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name)
+            )
         ]
-        with open(CUSTOM_FORCEFIELD_INDEX, "w", encoding="utf-8") as f:
-            json.dump({"force_fields": records}, f, indent=2, sort_keys=True)
-            f.write("\n")
+        fd, tmp_path = tempfile.mkstemp(
+            suffix=".json", prefix=".tmp_forcefield_", dir=CUSTOM_FORCEFIELD_INDEX.parent
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"force_fields": records}, f, indent=2, sort_keys=True)
+                f.write("\n")
+            os.replace(tmp_path, CUSTOM_FORCEFIELD_INDEX)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def _load_custom_force_fields(self) -> None:
         """Load custom force fields from source-tree JSON index."""
@@ -300,6 +323,11 @@ class ForceFieldRegistry:
             with open(CUSTOM_FORCEFIELD_INDEX, "r", encoding="utf-8") as f:
                 payload = json.load(f)
         except Exception:
+            logger.warning(
+                "Failed to load custom force field index from %s (file may be corrupted)",
+                CUSTOM_FORCEFIELD_INDEX,
+                exc_info=True,
+            )
             return
 
         records = payload.get("force_fields", []) if isinstance(payload, dict) else []
@@ -326,25 +354,28 @@ class ForceFieldRegistry:
             return "a1"
         max_id = max(self._custom_id_key(ff.name) for ff in self._custom_force_fields.values())
         return f"a{max_id + 1}"
-    
+
     def list_force_fields(self) -> List[str]:
         """List all available force field names.
-        
+
         Returns:
             List of force field names in order
         """
         builtin_names = [ff.name for ff in BUILTIN_FORCE_FIELDS]
         custom_names = [
-            ff.name for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
+            ff.name
+            for ff in sorted(
+                self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name)
+            )
         ]
         return builtin_names + custom_names
-    
+
     def list_by_family(self, family: str) -> List[str]:
         """List force field names by family.
-        
+
         Args:
             family: Family name (AMBER or CHARMM)
-        
+
         Returns:
             List of force field names in the family (in order)
         """
@@ -352,28 +383,30 @@ class ForceFieldRegistry:
         builtin_names = [ff.name for ff in BUILTIN_FORCE_FIELDS if ff.family.upper() == family]
         custom_names = [
             ff.name
-            for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
+            for ff in sorted(
+                self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name)
+            )
             if ff.family.upper() == family
         ]
         return builtin_names + custom_names
-    
+
     def get_force_field(self, name: str) -> Optional[ForceFieldInfo]:
         """Get force field information by name.
-        
+
         Supports:
         - CLI name: "1-a99SBdisp", "2-amber03wsc", etc.
         - Short number: "1", "2", etc.
         - pdb2gmx name: "a99SBdisp", "amber03wsc", "charmm36m", etc.
         - Alias: "charmm36m" maps to CHARMM36
-        
+
         Args:
             name: Force field name (case-insensitive)
-        
+
         Returns:
             ForceFieldInfo if found, None otherwise
         """
         name_lower = name.lower()
-        
+
         # Handle short number format (e.g., "1" -> "1-a99SBdisp")
         if name_lower.isdigit():
             for ff in BUILTIN_FORCE_FIELDS:
@@ -384,22 +417,25 @@ class ForceFieldRegistry:
         # Handle custom short id format (e.g., "a1")
         if CUSTOM_ID_PATTERN.match(name_lower) and name_lower in self._force_fields:
             return self._force_fields[name_lower]
-        
+
         # Try direct lookup first (for "1-a99SBdisp")
         if name_lower in self._force_fields:
             return self._force_fields[name_lower]
-        
+
         # Try pdb2gmx name lookup (for "a99SBdisp", "charmm36m", etc.)
         if name_lower in self._pdb2gmx_index:
             cli_name = self._pdb2gmx_index[name_lower]
             return self._force_fields[cli_name]
-        
+
         return None
 
     def list_custom_force_fields(self) -> List[str]:
         """List user-registered custom force field ids (a1, a2, ...)."""
         return [
-            ff.name for ff in sorted(self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name))
+            ff.name
+            for ff in sorted(
+                self._custom_force_fields.values(), key=lambda item: self._custom_id_key(item.name)
+            )
         ]
 
     def register_custom_force_field(
@@ -495,25 +531,25 @@ class ForceFieldRegistry:
 
         self._save_custom_force_fields()
         return ff
-    
+
     def get_pdb2gmx_name(self, name: str) -> Optional[str]:
         """Get pdb2gmx name for a force field.
-        
+
         Args:
             name: Force field name (CLI name or pdb2gmx name)
-        
+
         Returns:
             pdb2gmx name if found, None otherwise
         """
         ff = self.get_force_field(name)
         return ff.pdb2gmx_name if ff else None
-    
+
     def get_water_model(self, name: str) -> Optional[str]:
         """Get water model for a force field.
-        
+
         Args:
             name: Force field name
-        
+
         Returns:
             Water model name if found, None otherwise
         """
@@ -522,28 +558,28 @@ class ForceFieldRegistry:
 
     def get_solvate_cs(self, name: str) -> Optional[str]:
         """Get gmx solvate -cs water model for a force field.
-        
+
         Args:
             name: Force field name
-        
+
         Returns:
             gmx solvate -cs model name if found, None otherwise
         """
         ff = self.get_force_field(name)
         return ff.solvate_cs if ff else None
-    
+
     def get_gbsa_mapping(self, name: str) -> Optional[str]:
         """Get GBSA atom type mapping for a force field.
-        
+
         Args:
             name: Force field name
-        
+
         Returns:
             GBSA mapping name if found, None otherwise
         """
         ff = self.get_force_field(name)
         return ff.gbsa_mapping if ff else None
-    
+
     def get_family(self, name: str) -> Optional[str]:
         """Get family for a force field.
 
@@ -569,6 +605,7 @@ class ForceFieldRegistry:
             Path to force field folder if found, None otherwise
         """
         import importlib.resources as resources
+
         from .. import forcefield
 
         ff = self.get_force_field(name)
@@ -590,14 +627,14 @@ class ForceFieldRegistry:
             # For Python 3.9+
             ff_path = resources.files(forcefield) / ff_folder_name
             # Convert to Path if possible
-            if hasattr(ff_path, '__fspath__'):
+            if hasattr(ff_path, "__fspath__"):
                 return Path(str(ff_path))
             else:
                 # It's a Traversable, try to resolve
                 for p in resources.files(forcefield).iterdir():
                     if p.name == ff_folder_name:
                         return Path(str(p))
-        except Exception:
+        except (ModuleNotFoundError, AttributeError):
             pass
 
         # Fallback: construct path directly
@@ -607,43 +644,46 @@ class ForceFieldRegistry:
 
     def validate(self, name: str) -> tuple[bool, str]:
         """Validate a force field name.
-        
+
         Args:
             name: Force field name to validate
-        
+
         Returns:
             Tuple of (is_valid, message)
         """
         ff = self.get_force_field(name)
         if ff:
             return True, f"Valid force field: {ff.name} ({ff.family})"
-        return False, f"Unknown force field: {name}. Available: {', '.join(self.list_force_fields())}"
-    
+        return (
+            False,
+            f"Unknown force field: {name}. Available: {', '.join(self.list_force_fields())}",
+        )
+
     def is_amber(self, name: str) -> bool:
         """Check if a force field is from AMBER family.
-        
+
         Args:
             name: Force field name
-        
+
         Returns:
             True if AMBER family, False otherwise
         """
         return self.get_family(name) == "AMBER"
-    
+
     def is_charmm(self, name: str) -> bool:
         """Check if a force field is from CHARMM family.
-        
+
         Args:
             name: Force field name
-        
+
         Returns:
             True if CHARMM family, False otherwise
         """
         return self.get_family(name) == "CHARMM"
-    
+
     def count(self) -> int:
         """Get total number of registered force fields.
-        
+
         Returns:
             Number of force fields
         """
@@ -662,9 +702,10 @@ REGISTRY = ForceFieldRegistry()
 # Convenience Functions
 # =============================================================================
 
+
 def list_force_fields() -> List[str]:
     """List all available force field names.
-    
+
     Returns:
         List of force field names in order
     """
@@ -673,7 +714,7 @@ def list_force_fields() -> List[str]:
 
 def list_amber_force_fields() -> List[str]:
     """List available AMBER force field names.
-    
+
     Returns:
         List of AMBER force field names (in order)
     """
@@ -682,7 +723,7 @@ def list_amber_force_fields() -> List[str]:
 
 def list_charmm_force_fields() -> List[str]:
     """List available CHARMM force field names.
-    
+
     Returns:
         List of CHARMM force field names (in order)
     """
@@ -696,10 +737,10 @@ def list_custom_force_fields() -> List[str]:
 
 def get_force_field(name: str) -> Optional[ForceFieldInfo]:
     """Get force field information by name.
-    
+
     Args:
         name: Force field name (CLI name or pdb2gmx name)
-    
+
     Returns:
         ForceFieldInfo if found, None otherwise
     """
@@ -736,10 +777,10 @@ def get_force_field_path(name: str) -> Optional[str]:
 
 def validate_force_field(name: str) -> tuple[bool, str]:
     """Validate a force field name.
-    
+
     Args:
         name: Force field name to validate
-    
+
     Returns:
         Tuple of (is_valid, message)
     """

@@ -28,35 +28,84 @@ _DATA = Path(__file__).parent / "data"
 # Mpipi residue ordering: 20 amino acids + rU (RNA uridine, kept for table
 # completeness but excluded from protein-only simulations via a fixed index)
 _MPIPI_ORDER = [
-    "pM", "pG", "pK", "pT", "pR", "pA", "pD", "pE",
-    "pY", "pV", "pL", "pQ", "pW", "pF", "pS", "pH",
-    "pN", "pP", "pC", "pI",
+    "pM",
+    "pG",
+    "pK",
+    "pT",
+    "pR",
+    "pA",
+    "pD",
+    "pE",
+    "pY",
+    "pV",
+    "pL",
+    "pQ",
+    "pW",
+    "pF",
+    "pS",
+    "pH",
+    "pN",
+    "pP",
+    "pC",
+    "pI",
     # index 20: rU (RNA) -- unused in protein-only mode
 ]
-_N_MPIPI = 21   # table size (includes rU)
+_N_MPIPI = 21  # table size (includes rU)
 
 # Map standard three-letter code -> Mpipi index
 _AA3_TO_MPIPI: Dict[str, int] = {
-    "MET": 0,  "GLY": 1,  "LYS": 2,  "THR": 3,  "ARG": 4,
-    "ALA": 5,  "ASP": 6,  "GLU": 7,  "TYR": 8,  "VAL": 9,
-    "LEU": 10, "GLN": 11, "TRP": 12, "PHE": 13, "SER": 14,
-    "HIS": 15, "ASN": 16, "PRO": 17, "CYS": 18, "ILE": 19,
+    "MET": 0,
+    "GLY": 1,
+    "LYS": 2,
+    "THR": 3,
+    "ARG": 4,
+    "ALA": 5,
+    "ASP": 6,
+    "GLU": 7,
+    "TYR": 8,
+    "VAL": 9,
+    "LEU": 10,
+    "GLN": 11,
+    "TRP": 12,
+    "PHE": 13,
+    "SER": 14,
+    "HIS": 15,
+    "ASN": 16,
+    "PRO": 17,
+    "CYS": 18,
+    "ILE": 19,
 }
 
 # Mpipi residue masses
 _MPIPI_MASS: Dict[str, float] = {
-    "MET": 131.20, "GLY": 57.05,  "LYS": 128.20, "THR": 101.10, "ARG": 156.20,
-    "ALA": 71.08,  "ASP": 115.10, "GLU": 129.10, "TYR": 163.20, "VAL": 99.07,
-    "LEU": 113.20, "GLN": 128.10, "TRP": 186.20, "PHE": 147.20, "SER": 87.08,
-    "HIS": 137.10, "ASN": 114.10, "PRO": 97.12,  "CYS": 103.10, "ILE": 113.20,
+    "MET": 131.20,
+    "GLY": 57.05,
+    "LYS": 128.20,
+    "THR": 101.10,
+    "ARG": 156.20,
+    "ALA": 71.08,
+    "ASP": 115.10,
+    "GLU": 129.10,
+    "TYR": 163.20,
+    "VAL": 99.07,
+    "LEU": 113.20,
+    "GLN": 128.10,
+    "TRP": 186.20,
+    "PHE": 147.20,
+    "SER": 87.08,
+    "HIS": 137.10,
+    "ASN": 114.10,
+    "PRO": 97.12,
+    "CYS": 103.10,
+    "ILE": 113.20,
 }
 
-_K_BOND = 8031.0   # kJ/mol/nm^2  (harmonic backbone)
-_D_IDR  = 0.381    # nm  (IDR bond length)
+_K_BOND = 8031.0  # kJ/mol/nm^2  (harmonic backbone)
+_D_IDR = 0.381  # nm  (IDR bond length)
 
 # ENM parameters for folded domains
-_ENM_K       = 8031.0   # kJ/mol/nm^2
-_ENM_CUTOFF  = 0.75     # nm
+_ENM_K = 8031.0  # kJ/mol/nm^2
+_ENM_CUTOFF = 0.75  # nm
 # min_seq_sep=2 avoids adding ENM bonds for consecutive pairs (i, i+1) that
 # already have a backbone harmonic bond from topology.py, preventing double-bonding.
 # The old OpenMpipi code used KDTree with no sequence separation (eff. min_sep=0)
@@ -73,14 +122,15 @@ class MpipiFF(CGForceField):
         # First 21*21*3 values: WF table (eps, sigma, mu) stored row-major [i,j,k]
         # Last  21*21   values: Yukawa A-matrix
         n3 = _N_MPIPI * _N_MPIPI * 3
-        self._wf_params   = data[:n3].tolist()
-        self._yukawa_A    = data[n3:].tolist()
+        self._wf_params = data[:n3].tolist()
+        self._yukawa_A = data[n3:].tolist()
 
     # ------------------------------------------------------------------
 
     def add_masses(self, system: mm.System, chain_meta: List[dict]) -> None:
         for meta in chain_meta:
             from ..topology import ONE_TO_THREE
+
             for aa1 in meta["sequence"]:
                 three = ONE_TO_THREE.get(aa1, "GLY")
                 m = _MPIPI_MASS.get(three, 57.05)
@@ -95,11 +145,12 @@ class MpipiFF(CGForceField):
         debye_length: float = None,
     ) -> List[mm.Force]:
         if debye_length is not None:
-            kappa = 1.0 / debye_length   # nm^-1; explicit override
+            kappa = 1.0 / debye_length  # nm^-1; explicit override
         else:
             # Compute inverse Debye length from temperature and ionic strength,
             # matching the original OpenMpipi calculate_debye_length() formula.
             from .base import debye_huckel_params
+
             _, kappa = debye_huckel_params(temperature, ionic)
 
         # --- Wang-Frenkel short-range ---
@@ -115,8 +166,7 @@ class MpipiFF(CGForceField):
         )
         wf = mm.CustomNonbondedForce(wf_str)
         wf.addTabulatedFunction(
-            "wf_table",
-            mm.Discrete3DFunction(_N_MPIPI, _N_MPIPI, 3, self._wf_params)
+            "wf_table", mm.Discrete3DFunction(_N_MPIPI, _N_MPIPI, 3, self._wf_params)
         )
         wf.addPerParticleParameter("index")
         wf.addPerParticleParameter("globular")
@@ -128,8 +178,7 @@ class MpipiFF(CGForceField):
         yu_str = "(A_table(index1, index2)/r) * exp(-kappa*r)"
         yu = mm.CustomNonbondedForce(yu_str)
         yu.addTabulatedFunction(
-            "A_table",
-            mm.Discrete2DFunction(_N_MPIPI, _N_MPIPI, self._yukawa_A)
+            "A_table", mm.Discrete2DFunction(_N_MPIPI, _N_MPIPI, self._yukawa_A)
         )
         yu.addPerParticleParameter("index")
         yu.addGlobalParameter("kappa", kappa / unit.nanometer)
@@ -142,10 +191,12 @@ class MpipiFF(CGForceField):
 
         for atom in topology.atoms():
             from ..topology import THREE_TO_ONE
+
             aa1 = THREE_TO_ONE.get(atom.residue.name, "G")
             from ..topology import ONE_TO_THREE
+
             three = ONE_TO_THREE.get(aa1, "GLY")
-            idx = _AA3_TO_MPIPI.get(three, 1)   # fallback to GLY
+            idx = _AA3_TO_MPIPI.get(three, 1)  # fallback to GLY
             is_glob = 1 if atom.index in folded_atoms else 0
             wf.addParticle([idx, is_glob])
             yu.addParticle([idx])
@@ -191,15 +242,14 @@ class MpipiFF(CGForceField):
         inside the folded domain; the new unified pipeline always adds backbone bonds
         for all consecutive pairs, so we compensate with min_seq_sep=2.
         """
-        from typing import Optional
-        
+
         # Use MPIPI-specific defaults if not provided
         if k is None:
             k = _ENM_K
         if cutoff is None:
             cutoff = _ENM_CUTOFF
         min_seq_sep = _ENM_MIN_SEP
-        
+
         if restraint_type == "go":
             expr = "k*(5*(s/r)^12-6*(s/r)^10); s=s; k=k"
             cs = mm.CustomBondForce(expr)
@@ -207,17 +257,17 @@ class MpipiFF(CGForceField):
             cs.addPerBondParameter("k")
         else:
             cs = mm.HarmonicBondForce()
-        
+
         cs.setUsesPeriodicBoundaryConditions(True)
         n_bonds = 0
-        
+
         for meta in chain_meta:
             if not meta["folded_domains"]:
                 continue
             chain_start = meta["start"]
-            for (dom_s, dom_e) in meta["folded_domains"]:
-                a0 = chain_start + dom_s - 1   # absolute, 0-based
-                a1 = chain_start + dom_e        # exclusive
+            for dom_s, dom_e in meta["folded_domains"]:
+                a0 = chain_start + dom_s - 1  # absolute, 0-based
+                a1 = chain_start + dom_e  # exclusive
                 indices = list(range(a0, a1))
                 for ii in range(len(indices)):
                     for jj in range(ii + min_seq_sep, len(indices)):
@@ -225,16 +275,18 @@ class MpipiFF(CGForceField):
                         d = float(np.linalg.norm(positions[gi] - positions[gj]))
                         if d <= cutoff:
                             if restraint_type == "go":
-                                cs.addBond(gi, gj,
-                                           [d * unit.nanometer,
-                                            k * unit.kilojoule_per_mole])
+                                cs.addBond(
+                                    gi, gj, [d * unit.nanometer, k * unit.kilojoule_per_mole]
+                                )
                             else:
                                 cs.addBond(
-                                    gi, gj,
+                                    gi,
+                                    gj,
                                     d * unit.nanometer,
-                                    k * unit.kilojoule_per_mole / unit.nanometer ** 2)
+                                    k * unit.kilojoule_per_mole / unit.nanometer**2,
+                                )
                             n_bonds += 1
-        
+
         return cs if n_bonds > 0 else None
 
     # ------------------------------------------------------------------
@@ -245,7 +297,7 @@ class MpipiFF(CGForceField):
         folded = set()
         for meta in chain_meta:
             cs = meta["start"]
-            for (dom_s, dom_e) in meta["folded_domains"]:
+            for dom_s, dom_e in meta["folded_domains"]:
                 for i in range(cs + dom_s - 1, cs + dom_e):
                     folded.add(i)
         return folded

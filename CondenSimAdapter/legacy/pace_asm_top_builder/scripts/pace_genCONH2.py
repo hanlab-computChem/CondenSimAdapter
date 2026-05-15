@@ -1,5 +1,6 @@
 import sys
 
+
 def _replace_line(_tuple_list, _replace_rule, rl):
 
   for _ri in _replace_rule:
@@ -9,7 +10,7 @@ def _replace_line(_tuple_list, _replace_rule, rl):
 
 
   return rl
-   
+
 
 
 fnm = sys.argv[1]
@@ -21,12 +22,12 @@ for rl in open(fnm,'r'):
   _read_data = True
   continue
 
-# reading atom information data 
- 
+# reading atom information data
+
  if _read_data:
   srl=rl[:-1].split()
   if len(srl)==0: continue   # remove blank line
-  if ';' in srl[0]: continue # remove commented line  
+  if ';' in srl[0]: continue # remove commented line
   if '[' in srl[0]:
    _read_data = False
    continue
@@ -40,7 +41,7 @@ for rl in open(fnm,'r'):
 
 natom = len(_raw_data)
 nres = int(_raw_data[-1][2])
- 
+
 print( '; There are',natom,'atoms in',nres,'residues')
 
 # initiate index for all atoms
@@ -57,7 +58,7 @@ _fill_list = [ [_CA, 'CA'],[_CB, 'CB'],[_H,'H'],[_N,'N'],\
 
 _atom_in_res=[[] for i in range(nres)]
 for aid,i in enumerate(_raw_data):
- 
+
  resid = int(i[2])-1
  atomnm = i[4]
  _atom_in_res[resid].append(aid)
@@ -67,7 +68,7 @@ for aid,i in enumerate(_raw_data):
    _fi[0][resid]= aid+1
    break
 
-# _atom_in_res atom idx in each residue 
+# _atom_in_res atom idx in each residue
 # till here all the code can be used for general purpose
 
 
@@ -113,7 +114,7 @@ else:
 
 #print(_replace_2)
 
-if nres>=2: 
+if nres>=2:
  _idx = nres-1
  _add = [[[_N[_idx-1],_CA[_idx]],'%d  %d  1  3.89209E-03  8.47223E-06 ; NH2'%(_N[_idx-1],_CA[_idx])],\
 [ [_H[_idx-1],_N[_idx]],'%d  %d  1  0.0   0.0 ; NH2'%(_H[_idx-1],_N[_idx])   ],\
@@ -191,7 +192,7 @@ for rl in open(fnm, 'r'):
 
   print( rl,end='')
   continue
-  
+
 
  if _atom_section:
 
@@ -207,7 +208,7 @@ for rl in open(fnm, 'r'):
     print( __i[0][0],'  ',__i[0][1])
 
   print( rl,end='')
-     
+
  elif _pair_section:
 
 ## add pairs at the beginning of the pair section

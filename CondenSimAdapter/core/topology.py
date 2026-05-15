@@ -4,29 +4,60 @@ Build an OpenMM Topology for CG protein systems (one CA bead per residue).
 
 from __future__ import annotations
 
-import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
+import numpy as np
 import openmm as mm
 import openmm.app as app
 import openmm.unit as unit
 
-
 # Three-letter -> one-letter conversion table (proteins only)
 THREE_TO_ONE: Dict[str, str] = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLU": "E", "GLN": "Q", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+    "ALA": "A",
+    "ARG": "R",
+    "ASN": "N",
+    "ASP": "D",
+    "CYS": "C",
+    "GLU": "E",
+    "GLN": "Q",
+    "GLY": "G",
+    "HIS": "H",
+    "ILE": "I",
+    "LEU": "L",
+    "LYS": "K",
+    "MET": "M",
+    "PHE": "F",
+    "PRO": "P",
+    "SER": "S",
+    "THR": "T",
+    "TRP": "W",
+    "TYR": "Y",
+    "VAL": "V",
 }
 ONE_TO_THREE: Dict[str, str] = {v: k for k, v in THREE_TO_ONE.items()}
 
 # Residue masses (g/mol)
 RESIDUE_MASS: Dict[str, float] = {
-    "A": 71.08,  "R": 156.19, "N": 114.10, "D": 115.09, "C": 103.14,
-    "E": 129.11, "Q": 128.13, "G": 57.05,  "H": 137.14, "I": 113.16,
-    "L": 113.16, "K": 128.17, "M": 131.20, "F": 147.18, "P": 97.12,
-    "S": 87.08,  "T": 101.11, "W": 186.22, "Y": 163.18, "V": 99.13,
+    "A": 71.08,
+    "R": 156.19,
+    "N": 114.10,
+    "D": 115.09,
+    "C": 103.14,
+    "E": 129.11,
+    "Q": 128.13,
+    "G": 57.05,
+    "H": 137.14,
+    "I": 113.16,
+    "L": 113.16,
+    "K": 128.17,
+    "M": 131.20,
+    "F": 147.18,
+    "P": 97.12,
+    "S": 87.08,
+    "T": 101.11,
+    "W": 186.22,
+    "Y": 163.18,
+    "V": 99.13,
 }
 
 
@@ -110,9 +141,9 @@ def get_folded_atom_ranges(chain_meta: List[dict]) -> List[Tuple[int, int]]:
     ranges = []
     for meta in chain_meta:
         chain_start = meta["start"]
-        for (dom_start, dom_end) in meta["folded_domains"]:
+        for dom_start, dom_end in meta["folded_domains"]:
             # convert 1-based inclusive domain indices to 0-based absolute
             abs_start = chain_start + dom_start - 1
-            abs_end   = chain_start + dom_end       # exclusive
+            abs_end = chain_start + dom_end  # exclusive
             ranges.append((abs_start, abs_end))
     return ranges

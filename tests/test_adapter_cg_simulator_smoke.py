@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from CondenSimAdapter.src.cg import CGComponent, CGSimulationConfig, CGSimulator, ComponentType, TopologyType
+from CondenSimAdapter.src.cg import (
+    CGComponent,
+    CGSimulationConfig,
+    CGSimulator,
+    ComponentType,
+    TopologyType,
+)
 
 
 def test_cg_simulator_setup_marks_ready(tmp_path: Path) -> None:

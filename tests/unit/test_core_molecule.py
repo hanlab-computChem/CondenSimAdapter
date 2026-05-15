@@ -11,35 +11,34 @@ Tests cover:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
-from typing import List, Tuple
 
+from CondenSimAdapter.core.config import (
+    CGConfig,
+    Component,
+    ComponentType,
+    TopologyType,
+)
 from CondenSimAdapter.core.molecule import (
+    _build_compact,
+    _build_linear,
+    _build_spiral,
+    _build_xyzgrid,
+    build_all_chains,
     build_idp_chain,
     build_mdp_chain,
     place_chains_grid,
-    place_chains_slab,
     place_chains_random,
-    build_all_chains,
-    _build_spiral,
-    _build_linear,
-    _build_compact,
-    _build_xyzgrid,
-    _assemble_chains,
+    place_chains_slab,
 )
-from CondenSimAdapter.core.config import (
-    Component,
-    ComponentType,
-    CGConfig,
-    TopologyType,
-)
-
 
 # =============================================================================
 # IDP Chain Building Tests
 # =============================================================================
+
 
 class TestBuildIDPChain:
     """Tests for build_idp_chain function."""
@@ -157,6 +156,7 @@ class TestBuildCompactInternal:
 # MDP Chain Building Tests
 # =============================================================================
 
+
 class TestBuildMDPChain:
     """Tests for build_mdp_chain function (requires MDAnalysis)."""
 
@@ -229,6 +229,7 @@ END
 # =============================================================================
 # Grid Placement Tests
 # =============================================================================
+
 
 class TestBuildXYZGrid:
     """Tests for _build_xyzgrid helper."""
@@ -349,6 +350,7 @@ class TestPlaceChainsRandom:
 # High-level Builder Tests
 # =============================================================================
 
+
 class TestBuildAllChains:
     """Tests for build_all_chains function."""
 
@@ -413,7 +415,7 @@ END
 """
         pdb_path = tmp_path / "mdp.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         comp = Component(
             name="MDP1",
             comp_type=ComponentType.MDP,

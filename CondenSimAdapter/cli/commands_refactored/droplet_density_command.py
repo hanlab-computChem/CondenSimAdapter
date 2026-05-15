@@ -14,27 +14,30 @@ import click
 from ...core.config import CGConfig as CGSimulationConfig
 
 
-@click.command('droplet-density', context_settings={'help_option_names': ['-h', '--help']})
+@click.command("droplet-density", context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
-    '--input-file', '-f',
+    "--input-file",
+    "-f",
     type=click.Path(exists=True),
     required=True,
-    help='Configuration YAML file'
+    help="Configuration YAML file",
 )
 @click.option(
-    '--radius', '-r',
+    "--radius",
+    "-r",
     type=float,
     required=False,
-    help='Droplet radius in nm (defaults to value in YAML if present)'
+    help="Droplet radius in nm (defaults to value in YAML if present)",
 )
 @click.option(
-    '--nmol', '-n',
+    "--nmol",
+    "-n",
     type=str,
     default=None,
     required=False,
-    help='Number of molecules for each component (space-separated, e.g., -n "10 20")'
+    help='Number of molecules for each component (space-separated, e.g., -n "10 20")',
 )
-@click.argument('extra_nmol', nargs=-1, type=str, required=False)
+@click.argument("extra_nmol", nargs=-1, type=str, required=False)
 def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmol: tuple):
     """\b
     Estimate protein density in a droplet geometry.
@@ -74,7 +77,7 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
             nmol_values = extra_values
 
     click.echo(f"\n{'=' * 60}")
-    click.echo(f"Droplet Density Estimation")
+    click.echo("Droplet Density Estimation")
     click.echo(f"{'=' * 60}\n")
 
     # Load configuration
@@ -89,10 +92,11 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
         radius_from_yaml = None
         try:
             import yaml
-            with open(input_file, 'r') as f:
+
+            with open(input_file, "r") as f:
                 data = yaml.safe_load(f)
             if isinstance(data, dict):
-                radius_from_yaml = data.get('radius')
+                radius_from_yaml = data.get("radius")
         except Exception:
             radius_from_yaml = None
 
@@ -118,14 +122,14 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
             click.echo(f"  ✗ Error: -n flag requires {n_components} values (one per component)")
             click.echo(f"    Found {n_components} component(s) in configuration:")
             for i, comp in enumerate(config.components):
-                click.echo(f"      {i+1}. {comp.name} ({comp.comp_type.value})")
+                click.echo(f"      {i + 1}. {comp.name} ({comp.comp_type.value})")
             click.echo(f"\n    You provided {n_provided} value(s): {nmol_values}")
             click.echo(f"    Please provide exactly {n_components} integer(s).")
             sys.exit(1)
 
         # Check for negative values
         if any(n <= 0 for n in nmol_values):
-            click.echo(f"  ✗ Error: All -n values must be positive integers")
+            click.echo("  ✗ Error: All -n values must be positive integers")
             sys.exit(1)
 
     # Constants
@@ -135,16 +139,32 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
 
     # Amino acid molecular weights (Da) - monoisotopic mass
     AA_WEIGHTS = {
-        'A': 89.09, 'C': 121.15, 'D': 133.10, 'E': 147.13, 'F': 165.19,
-        'G': 75.07, 'H': 155.16, 'I': 131.18, 'K': 146.19, 'L': 131.18,
-        'M': 149.21, 'N': 132.12, 'P': 115.13, 'Q': 146.15, 'R': 174.20,
-        'S': 105.09, 'T': 119.12, 'V': 117.15, 'W': 204.23, 'Y': 181.19,
+        "A": 89.09,
+        "C": 121.15,
+        "D": 133.10,
+        "E": 147.13,
+        "F": 165.19,
+        "G": 75.07,
+        "H": 155.16,
+        "I": 131.18,
+        "K": 146.19,
+        "L": 131.18,
+        "M": 149.21,
+        "N": 132.12,
+        "P": 115.13,
+        "Q": 146.15,
+        "R": 174.20,
+        "S": 105.09,
+        "T": 119.12,
+        "V": 117.15,
+        "W": 204.23,
+        "Y": 181.19,
         # Non-standard or ambiguous
-        'U': 168.05,  # Selenocysteine
-        'O': 255.31,  # Pyrrolysine
-        'B': 132.61,  # Asx (average of D and N)
-        'Z': 146.64,  # Glx (average of E and Q)
-        'X': 110.0,   # Unknown (use average)
+        "U": 168.05,  # Selenocysteine
+        "O": 255.31,  # Pyrrolysine
+        "B": 132.61,  # Asx (average of D and N)
+        "Z": 146.64,  # Glx (average of E and Q)
+        "X": 110.0,  # Unknown (use average)
     }
 
     def calculate_protein_mass(sequence: str) -> float:
@@ -172,7 +192,7 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
         return total
 
     # Calculate droplet volume (nm³)
-    volume_nm3 = (4.0 / 3.0) * math.pi * (radius ** 3)
+    volume_nm3 = (4.0 / 3.0) * math.pi * (radius**3)
 
     # Convert to liters (1 nm³ = 1e-24 L)
     volume_L = volume_nm3 * 1e-24
@@ -189,10 +209,10 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
         # Use user-provided nmol if -n flag is set, otherwise use config value
         if nmol_values:
             current_nmol = nmol_values[idx]
-            nmol_source.append('user')
+            nmol_source.append("user")
         else:
             current_nmol = comp.nmol
-            nmol_source.append('config')
+            nmol_source.append("config")
 
         # Try to get actual sequence
         sequence = None
@@ -208,9 +228,11 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
             try:
                 fasta_path = Path(input_file).parent / comp.fasta_path
                 if fasta_path.exists():
-                    with open(fasta_path, 'r') as f:
+                    with open(fasta_path, "r") as f:
                         lines = f.readlines()
-                        sequence = ''.join(line.strip() for line in lines if not line.startswith('>'))
+                        sequence = "".join(
+                            line.strip() for line in lines if not line.startswith(">")
+                        )
                         nres = len(sequence)
             except Exception:
                 pass
@@ -222,14 +244,15 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
                 if pdb_path.exists():
                     from Bio.PDB import PDBParser
                     from Bio.SeqUtils import seq1
+
                     parser = PDBParser(QUIET=True)
-                    structure = parser.get_structure('protein', str(pdb_path))
+                    structure = parser.get_structure("protein", str(pdb_path))
                     # Try to extract sequence from PDB
                     residues = list(structure.get_residues())
                     nres = len(residues)
                     try:
                         # Convert 3-letter codes to 1-letter
-                        sequence = ''.join(seq1(res.get_resname()) for res in residues)
+                        sequence = "".join(seq1(res.get_resname()) for res in residues)
                     except Exception:
                         # If conversion fails, just count residues
                         sequence = None
@@ -239,8 +262,10 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
         # Priority 4: comp.nres is no longer available on Component
 
         if nres == 0:
-            click.echo(f"  ✗ Warning: Could not determine residue count for component '{comp.name}'")
-            click.echo(f"    Please ensure sequence or structure files are accessible.")
+            click.echo(
+                f"  ✗ Warning: Could not determine residue count for component '{comp.name}'"
+            )
+            click.echo("    Please ensure sequence or structure files are accessible.")
             continue
 
         # Calculate mass for this component
@@ -249,30 +274,32 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
             mass_per_molecule = calculate_protein_mass(sequence)
             comp_mass_Da = mass_per_molecule * current_nmol
             exact_mass_count += 1
-            mass_method = 'exact'
+            mass_method = "exact"
         else:
             # Use average residue mass
             mass_per_molecule = nres * AVG_RESIDUE_MASS
             comp_mass_Da = mass_per_molecule * current_nmol
             estimated_mass_count += 1
-            mass_method = 'estimated'
+            mass_method = "estimated"
 
         total_mass_Da += comp_mass_Da
         total_molecules += current_nmol
 
-        component_details.append({
-            'name': comp.name,
-            'type': comp.comp_type.value,
-            'nmol': current_nmol,
-            'nmol_source': nmol_source[idx],
-            'nres': nres,
-            'mass_per_mol': mass_per_molecule,
-            'total_mass': comp_mass_Da,
-            'mass_method': mass_method
-        })
+        component_details.append(
+            {
+                "name": comp.name,
+                "type": comp.comp_type.value,
+                "nmol": current_nmol,
+                "nmol_source": nmol_source[idx],
+                "nres": nres,
+                "mass_per_mol": mass_per_molecule,
+                "total_mass": comp_mass_Da,
+                "mass_method": mass_method,
+            }
+        )
 
     if total_mass_Da == 0:
-        click.echo(f"  ✗ Error: No valid components found or masses are zero")
+        click.echo("  ✗ Error: No valid components found or masses are zero")
         sys.exit(1)
 
     # Convert to grams
@@ -283,43 +310,45 @@ def droplet_density_command(input_file: str, radius: float, nmol: str, extra_nmo
     density_mgmL = total_mass_g / volume_L  # g/L = mg/mL
 
     # Display results
-    click.echo(f"  Input:")
+    click.echo("  Input:")
     click.echo(f"    Configuration: {input_file}")
     click.echo(f"    Radius: {radius:.2f} nm")
     click.echo(f"    Volume: {volume_nm3:.2f} nm³ ({volume_L:.6e} L)")
 
-    click.echo(f"\n  Composition:")
+    click.echo("\n  Composition:")
     click.echo(f"    Total components: {len(component_details)}")
     click.echo(f"    Total molecules: {total_molecules}")
     click.echo(f"    Total mass: {total_mass_Da:.2f} Da ({total_mass_g:.6e} g)")
 
     # Show nmol source
     if nmol_values:
-        click.echo(f"    Molecule counts: User-provided via -n flag")
+        click.echo("    Molecule counts: User-provided via -n flag")
         for idx, comp_info in enumerate(component_details):
-            click.echo(f"      {idx+1}. {comp_info['name']}: {comp_info['nmol']} molecules")
+            click.echo(f"      {idx + 1}. {comp_info['name']}: {comp_info['nmol']} molecules")
     else:
-        click.echo(f"    Molecule counts: From configuration file")
+        click.echo("    Molecule counts: From configuration file")
 
     # Show mass calculation method
     if exact_mass_count > 0 and estimated_mass_count == 0:
-        click.echo(f"    Mass calculation: Exact (from sequences)")
+        click.echo("    Mass calculation: Exact (from sequences)")
     elif exact_mass_count == 0 and estimated_mass_count > 0:
         click.echo(f"    Mass calculation: Estimated (avg {AVG_RESIDUE_MASS} Da/residue)")
     else:
-        click.echo(f"    Mass calculation: Mixed ({exact_mass_count} exact, {estimated_mass_count} estimated)")
+        click.echo(
+            f"    Mass calculation: Mixed ({exact_mass_count} exact, {estimated_mass_count} estimated)"
+        )
 
-    click.echo(f"\n  Density:")
+    click.echo("\n  Density:")
     click.echo(f"    {density_mgmL:.1f} mg/mL (g/L)")
 
     # Check warnings
     if density_mgmL < 300:
         click.echo(f"\n  ⚠ WARNING: Density ({density_mgmL:.1f} mg/mL) is below 300 mg/mL")
-        click.echo(f"    This may be too dilute for droplet formation.")
+        click.echo("    This may be too dilute for droplet formation.")
     elif density_mgmL > 800:
         click.echo(f"\n  ⚠ WARNING: Density ({density_mgmL:.1f} mg/mL) is above 800 mg/mL")
-        click.echo(f"    This may be too concentrated and could cause simulation issues.")
+        click.echo("    This may be too concentrated and could cause simulation issues.")
     else:
-        click.echo(f"    ✓ Density is within recommended range (300-800 mg/mL)")
+        click.echo("    ✓ Density is within recommended range (300-800 mg/mL)")
 
     click.echo()

@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import yaml
-
 from CondenSimAdapter.src.cg import CGSimulationConfig
 
 

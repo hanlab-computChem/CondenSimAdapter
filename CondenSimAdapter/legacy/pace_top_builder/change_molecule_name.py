@@ -1,4 +1,3 @@
-import os
 import sys
 
 topol = sys.argv[1]
@@ -10,7 +9,7 @@ with open(topol, 'r') as f:
     mole_flag = False
     moleculetype_flag = False
     for rl in f:
-        
+
         if rl.startswith('[ moleculetype'):
             moleculetype_flag = True
         if moleculetype_flag:
@@ -36,4 +35,3 @@ with open(topol, 'r') as f:
 with open(topol, 'w') as f:
     for rl in lines:
         f.write(rl)
-    

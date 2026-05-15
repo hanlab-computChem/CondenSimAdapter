@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from CondenSimAdapter.src.cg import (
     CGSimulationConfig,
     CGSimulator,

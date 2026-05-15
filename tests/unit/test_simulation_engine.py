@@ -10,10 +10,11 @@ Tests cover:
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import Mock, patch
+
 import numpy as np
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 
 pytest.importorskip("openmm")
 
@@ -21,24 +22,24 @@ import openmm as mm
 import openmm.app as app
 import openmm.unit as unit
 
-from CondenSimAdapter.core.simulation import (
-    CGSimulation,
-    _resolve_platform,
-    _save_pdb,
-    _save_final_pdb,
-)
 from CondenSimAdapter.core.config import (
     CGConfig,
     Component,
     ComponentType,
-    TopologyType,
     SimulationParams,
+    TopologyType,
 )
-
+from CondenSimAdapter.core.simulation import (
+    CGSimulation,
+    _resolve_platform,
+    _save_final_pdb,
+    _save_pdb,
+)
 
 # =============================================================================
 # CGSimulation Initialization Tests
 # =============================================================================
+
 
 class TestCGSimulationInit:
     """Tests for CGSimulation initialization."""
@@ -74,12 +75,14 @@ class TestCGSimulationInit:
         sim = CGSimulation(simple_config)
         # Should resolve to calvados2 for all-IDP system
         from CondenSimAdapter.core.forcefield.calvados import CalvadosFF
+
         assert isinstance(sim.ff, CalvadosFF)
 
 
 # =============================================================================
 # Platform Resolution Tests
 # =============================================================================
+
 
 class TestResolvePlatform:
     """Tests for _resolve_platform function."""
@@ -112,6 +115,7 @@ class TestResolvePlatform:
 # System Creation Tests
 # =============================================================================
 
+
 class TestCreateSystem:
     """Tests for _create_system method."""
 
@@ -135,28 +139,34 @@ class TestCreateSystem:
     @pytest.fixture
     def chain_meta(self):
         """Simple chain metadata."""
-        return [{
-            "name": "FUS",
-            "start": 0,
-            "end": 4,
-            "sequence": "AAAA",
-            "folded_domains": [],
-        }]
+        return [
+            {
+                "name": "FUS",
+                "start": 0,
+                "end": 4,
+                "sequence": "AAAA",
+                "folded_domains": [],
+            }
+        ]
 
     @pytest.fixture
     def positions(self):
         """Simple positions."""
-        return np.array([
-            [0, 0, 0],
-            [0.38, 0, 0],
-            [0.76, 0, 0],
-            [1.14, 0, 0],
-        ], dtype=np.float64)
+        return np.array(
+            [
+                [0, 0, 0],
+                [0.38, 0, 0],
+                [0.76, 0, 0],
+                [1.14, 0, 0],
+            ],
+            dtype=np.float64,
+        )
 
     @pytest.fixture
     def topology(self, chain_meta, positions):
         """Create OpenMM topology."""
         from CondenSimAdapter.core.topology import build_topology
+
         top, _ = build_topology(chain_meta, positions, [20.0, 20.0, 20.0])
         return top
 
@@ -212,13 +222,15 @@ class TestCreateSystem:
 
     def test_enm_added_for_folded_domains(self, topology, positions):
         """Test ENM is added when folded domains exist."""
-        chain_meta_with_domains = [{
-            "name": "MDP1",
-            "start": 0,
-            "end": 4,
-            "sequence": "AAAA",
-            "folded_domains": [(1, 4)],
-        }]
+        chain_meta_with_domains = [
+            {
+                "name": "MDP1",
+                "start": 0,
+                "end": 4,
+                "sequence": "AAAA",
+                "folded_domains": [(1, 4)],
+            }
+        ]
         comp = Component(name="MDP1", comp_type=ComponentType.MDP, sequence="AAAA", nmol=1)
         config = CGConfig(
             system_name="test",
@@ -270,6 +282,7 @@ class TestCreateSystem:
 # Run Method Tests (Mocked)
 # =============================================================================
 
+
 class TestRunMethod:
     """Tests for run method with mocked OpenMM."""
 
@@ -302,7 +315,7 @@ class TestRunMethod:
         output_dir = tmp_path / "existing_output"
         output_dir.mkdir()
         (output_dir / "dummy.txt").write_text("dummy")
-        
+
         sim = CGSimulation(simple_config)
         with pytest.raises(FileExistsError, match="already exists"):
             sim.run(str(output_dir), overwrite=False)
@@ -310,10 +323,10 @@ class TestRunMethod:
     def test_creates_output_directory(self, simple_config, tmp_path):
         """Test that run creates output directory."""
         output_dir = tmp_path / "new_output"
-        
+
         sim = CGSimulation(simple_config)
         # Use mock to avoid actual simulation
-        with patch.object(sim, '_run_pipeline') as mock_pipeline:
+        with patch.object(sim, "_run_pipeline") as mock_pipeline:
             mock_pipeline.return_value = Mock(
                 success=True,
                 output_dir=str(output_dir),
@@ -322,15 +335,15 @@ class TestRunMethod:
                 log_file="sim.log",
             )
             sim.run(str(output_dir))
-        
+
         assert output_dir.exists()
 
     def test_returns_result_object(self, simple_config, tmp_path):
         """Test that run returns SimulationResult."""
         output_dir = tmp_path / "output"
-        
+
         sim = CGSimulation(simple_config)
-        with patch.object(sim, '_run_pipeline') as mock_pipeline:
+        with patch.object(sim, "_run_pipeline") as mock_pipeline:
             mock_result = Mock(
                 success=True,
                 output_dir=str(output_dir),
@@ -341,19 +354,19 @@ class TestRunMethod:
             )
             mock_pipeline.return_value = mock_result
             result = sim.run(str(output_dir))
-        
+
         assert result.success is True
         assert result.output_dir == str(output_dir)
 
     def test_error_handling(self, simple_config, tmp_path):
         """Test that errors are caught and returned in result."""
         output_dir = tmp_path / "output"
-        
+
         sim = CGSimulation(simple_config)
-        with patch.object(sim, '_run_pipeline') as mock_pipeline:
+        with patch.object(sim, "_run_pipeline") as mock_pipeline:
             mock_pipeline.side_effect = RuntimeError("Test error")
             result = sim.run(str(output_dir))
-        
+
         assert result.success is False
         assert "Test error" in result.error
         assert result.elapsed_seconds > 0
@@ -362,9 +375,9 @@ class TestRunMethod:
         """Test that overwrite flag allows reusing directory."""
         output_dir = tmp_path / "existing_output"
         output_dir.mkdir()
-        
+
         sim = CGSimulation(simple_config)
-        with patch.object(sim, '_run_pipeline') as mock_pipeline:
+        with patch.object(sim, "_run_pipeline") as mock_pipeline:
             mock_pipeline.return_value = Mock(
                 success=True,
                 output_dir=str(output_dir),
@@ -380,6 +393,7 @@ class TestRunMethod:
 # =============================================================================
 # PDB I/O Tests
 # =============================================================================
+
 
 class TestSavePDB:
     """Tests for _save_pdb helper."""
@@ -426,22 +440,23 @@ class TestSaveFinalPDB:
         positions = np.array([[1.0, 2.0, 3.0]]) * unit.nanometer
         mock_state.getPositions.return_value = positions
         mock_sim.context.getState.return_value = mock_state
-        
+
         # Create simple topology
         top = app.Topology()
         chain = top.addChain()
         res = top.addResidue("ALA", chain)
         top.addAtom("CA", app.element.carbon, res)
-        
+
         output_file = tmp_path / "final.pdb"
         _save_final_pdb(mock_sim, top, [10.0, 10.0, 10.0], str(output_file))
-        
+
         assert output_file.exists()
 
 
 # =============================================================================
 # Integration Smoke Tests
 # =============================================================================
+
 
 @pytest.mark.slow
 class TestSimulationIntegration:
@@ -474,10 +489,10 @@ class TestSimulationIntegration:
     def test_full_simulation_runs(self, tiny_config, tmp_path):
         """Test that a full simulation runs successfully."""
         output_dir = tmp_path / "sim_output"
-        
+
         sim = CGSimulation(tiny_config)
         result = sim.run(str(output_dir))
-        
+
         assert result.success is True
         assert result.final_pdb is not None
         assert Path(result.final_pdb).exists()
@@ -487,10 +502,10 @@ class TestSimulationIntegration:
     def test_simulation_outputs_log(self, tiny_config, tmp_path):
         """Test that simulation generates log file."""
         output_dir = tmp_path / "sim_output"
-        
+
         sim = CGSimulation(tiny_config)
         result = sim.run(str(output_dir))
-        
+
         assert result.log_file is not None
         assert Path(result.log_file).exists()
 
@@ -516,9 +531,9 @@ class TestSimulationIntegration:
                 topology=TopologyType.CUBIC,
                 simulation=sim_params,
             )
-            
+
             output_dir = tmp_path / f"sim_{ff_name}"
             sim = CGSimulation(config)
             result = sim.run(str(output_dir))
-            
+
             assert result.success, f"Force field {ff_name} failed: {result.error}"

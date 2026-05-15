@@ -1,7 +1,5 @@
 import sys
 
-
-
 # main #
 
 n_comp = int((len(sys.argv)-1)/2)
@@ -23,7 +21,7 @@ for _i in range(n_comp):
 
 
 print( '#include "pace-asm.ff/forcefield.itp"')
-print() 
+print()
 
 mol_nm=[]
 _suf=0
@@ -36,11 +34,11 @@ for _i in nm:
   _st = False
   _end = False
   _find_mol = True
-  
+
   for rl in open(_i+'.top','r'):
    if 'moleculetype' in rl: _st =True
    if _st:
-    
+
     if _find_mol and rl[0]!=';' and rl[0]!='[':
      srl=rl[:-1].split()
      if len(srl)>=2:

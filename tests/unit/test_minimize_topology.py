@@ -10,40 +10,30 @@ Tests cover:
 from __future__ import annotations
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, mock_open
 
 from CondenSimAdapter.minimize.topology_builder import (
     _build_pdb2gmx_input,
-    modify_topology_molecule_name,
     count_chains_in_pdb,
+    modify_topology_molecule_name,
     verify_files_valid,
 )
-
 
 # =============================================================================
 # PDB2GMX Input Building Tests
 # =============================================================================
+
 
 class TestBuildPDB2GMXInput:
     """Tests for _build_pdb2gmx_input function."""
 
     def test_no_options_returns_none(self):
         """Test with no options returns None."""
-        result = _build_pdb2gmx_input(
-            disable_disulfide=False,
-            his_type=None,
-            his_repeat_count=30
-        )
+        result = _build_pdb2gmx_input(disable_disulfide=False, his_type=None, his_repeat_count=30)
         assert result is None
 
     def test_disulfide_only(self):
         """Test disulfide disabling only."""
-        result = _build_pdb2gmx_input(
-            disable_disulfide=True,
-            his_type=None,
-            his_repeat_count=30
-        )
+        result = _build_pdb2gmx_input(disable_disulfide=True, his_type=None, his_repeat_count=30)
         assert result is not None
         assert "n\n" in result
 
@@ -52,7 +42,7 @@ class TestBuildPDB2GMXInput:
         result = _build_pdb2gmx_input(
             disable_disulfide=False,
             his_type=0,  # HID
-            his_repeat_count=5
+            his_repeat_count=5,
         )
         assert result is not None
         assert "0\n" in result
@@ -64,7 +54,7 @@ class TestBuildPDB2GMXInput:
         result = _build_pdb2gmx_input(
             disable_disulfide=True,
             his_type=1,  # HIE
-            his_repeat_count=3
+            his_repeat_count=3,
         )
         assert result is not None
         assert "n\n" in result
@@ -76,13 +66,14 @@ class TestBuildPDB2GMXInput:
             _build_pdb2gmx_input(
                 disable_disulfide=False,
                 his_type=2,  # Invalid
-                his_repeat_count=30
+                his_repeat_count=30,
             )
 
 
 # =============================================================================
 # Topology Modification Tests
 # =============================================================================
+
 
 class TestModifyTopologyMoleculeName:
     """Tests for modify_topology_molecule_name function."""
@@ -102,9 +93,9 @@ Protein             3
 """
         top_path = tmp_path / "topol.top"
         top_path.write_text(topology_content)
-        
+
         modify_topology_molecule_name(top_path, "NewName")
-        
+
         result = top_path.read_text()
         assert "NewName" in result
         assert "Protein" not in result
@@ -124,9 +115,9 @@ Protein             3
 """
         top_path = tmp_path / "topol.top"
         top_path.write_text(topology_content)
-        
+
         modify_topology_molecule_name(top_path, "Test")
-        
+
         result = top_path.read_text()
         assert "[ atoms ]" in result
         assert "[ bonds ]" in result
@@ -136,6 +127,7 @@ Protein             3
 # =============================================================================
 # Chain Counting Tests
 # =============================================================================
+
 
 class TestCountChainsInPDB:
     """Tests for count_chains_in_pdb function."""
@@ -149,7 +141,7 @@ END
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         count = count_chains_in_pdb(pdb_path)
         assert count == 1
 
@@ -163,7 +155,7 @@ END
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         count = count_chains_in_pdb(pdb_path)
         assert count == 3
 
@@ -176,7 +168,7 @@ END
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         count = count_chains_in_pdb(pdb_path)
         assert count == 2
 
@@ -188,7 +180,7 @@ END
 """
         pdb_path = tmp_path / "test.pdb"
         pdb_path.write_text(pdb_content)
-        
+
         count = count_chains_in_pdb(pdb_path)
         # Empty chain ID should not be counted
         assert count == 0
@@ -198,6 +190,7 @@ END
 # File Verification Tests
 # =============================================================================
 
+
 class TestVerifyFilesValid:
     """Tests for verify_files_valid function."""
 
@@ -206,7 +199,7 @@ class TestVerifyFilesValid:
         top_path = tmp_path / "missing.top"
         gro_path = tmp_path / "test.gro"
         gro_path.write_text("test")
-        
+
         success, message = verify_files_valid(str(top_path), str(gro_path))
         assert success is False
         assert "not found" in message.lower()
@@ -216,7 +209,7 @@ class TestVerifyFilesValid:
         top_path = tmp_path / "test.top"
         gro_path = tmp_path / "missing.gro"
         top_path.write_text("test")
-        
+
         success, message = verify_files_valid(str(top_path), str(gro_path))
         assert success is False
         assert "not found" in message.lower()
@@ -225,7 +218,7 @@ class TestVerifyFilesValid:
         """Test topology without [ atoms ] section fails."""
         top_path = tmp_path / "test.top"
         gro_path = tmp_path / "test.gro"
-        
+
         top_path.write_text("""\
 [ moleculetype ]
 Test 3
@@ -241,7 +234,7 @@ Test
     1ALA     C    2   0.100   0.000   0.000
    0.10000   0.10000   0.10000
 """)
-        
+
         success, message = verify_files_valid(str(top_path), str(gro_path))
         assert success is False
         assert "missing [ atoms ]" in message
@@ -250,7 +243,7 @@ Test
         """Test topology without [ molecules ] section fails."""
         top_path = tmp_path / "test.top"
         gro_path = tmp_path / "test.gro"
-        
+
         top_path.write_text("""\
 [ moleculetype ]
 Test 3
@@ -265,7 +258,7 @@ Test
     1ALA    CA    1   0.000   0.000   0.000
    0.10000   0.10000   0.10000
 """)
-        
+
         success, message = verify_files_valid(str(top_path), str(gro_path))
         assert success is False
         assert "missing [ molecules ]" in message

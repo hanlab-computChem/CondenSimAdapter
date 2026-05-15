@@ -16,33 +16,35 @@ import shutil
 from pathlib import Path
 
 try:
-    import openmm.unit as unit
     import openmm as mm
-    from openmm.app import GromacsGroFile, Simulation, PDBFile, forcefield as ff
+    import openmm.unit as unit
     from openmm import LangevinIntegrator, Platform
+    from openmm.app import GromacsGroFile, PDBFile, Simulation
+    from openmm.app import forcefield as ff
 except ImportError:
-    import simtk.unit as unit
     import simtk.openmm as mm
-    from simtk.openmm.app import GromacsGroFile, Simulation, PDBFile, forcefield as ff
+    import simtk.unit as unit
     from simtk.openmm import LangevinIntegrator, Platform
+    from simtk.openmm.app import GromacsGroFile, PDBFile, Simulation
+    from simtk.openmm.app import forcefield as ff
 
+from ..src.device_utils import resolve_openmm_platform
 from .softcore import (
-    GromacsTopFileWithSoftcore,
+    IMPLICIT_GBN2,
+    IMPLICIT_OBC2,
     NONBONDED_GAUSSIAN,
     NONBONDED_SOFTCORE,
     NONBONDED_STANDARD,
-    IMPLICIT_GBN2,
-    IMPLICIT_OBC2,
+    GromacsTopFileWithSoftcore,
 )
-from ..src.device_utils import resolve_openmm_platform
 
 
 def _get_lambda_values(level: str):
     """Return lambda schedule for a given optimization level."""
     configs = {
-        "high":   [0.65, 0.75, 0.85, 0.95],
+        "high": [0.65, 0.75, 0.85, 0.95],
         "medium": [0.75, 0.85, 0.95],
-        "low":    [0.85, 0.95],
+        "low": [0.85, 0.95],
     }
     level = level.lower()
     if level not in configs:
@@ -70,14 +72,14 @@ def _select_platform(device: str, gpu_id: int):
 
     if platform_name == "CUDA":
         fallback_chain = [
-            ("CUDA",   properties),
+            ("CUDA", properties),
             ("OpenCL", {"Precision": "mixed", "DeviceIndex": str(gpu_id)}),
-            ("CPU",    {}),
+            ("CPU", {}),
         ]
     elif platform_name == "OPENCL":
         fallback_chain = [
             ("OpenCL", properties),
-            ("CPU",    {}),
+            ("CPU", {}),
         ]
     else:
         fallback_chain = [(platform_name, properties)]
@@ -85,9 +87,10 @@ def _select_platform(device: str, gpu_id: int):
     def _probe(name):
         p = Platform.getPlatformByName(name)
         if name not in ("CPU", "Reference"):
-            _s = mm.System(); _s.addParticle(1.0)
+            _s = mm.System()
+            _s.addParticle(1.0)
             _i = mm.VerletIntegrator(0.001)
-            _c = mm.Context(_s, _i, p)   # no properties — avoids false failures
+            _c = mm.Context(_s, _i, p)  # no properties — avoids false failures
             del _c, _i, _s
         return p
 
@@ -147,13 +150,13 @@ def run_minimization(
     -------
     dict with keys "step_info" and "total_steps"
     """
-    input_gro_path  = Path(input_gro).resolve()
-    input_top_path  = Path(input_top).resolve()
-    output_path     = Path(output_dir).resolve()
+    input_gro_path = Path(input_gro).resolve()
+    input_top_path = Path(input_top).resolve()
+    output_path = Path(output_dir).resolve()
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Copy inputs into output dir so topology relative #includes resolve
-    conf_gro     = output_path / "conf.gro"
+    conf_gro = output_path / "conf.gro"
     minimize_top = output_path / "topol.top"
     if str(input_gro_path) != str(conf_gro):
         shutil.copy2(str(input_gro_path), str(conf_gro))
@@ -163,7 +166,7 @@ def run_minimization(
     # ── Load structure ────────────────────────────────────────────────────
     conf = GromacsGroFile(str(conf_gro))
     gro_positions = conf.getPositions()
-    box_vectors   = conf.getPeriodicBoxVectors()
+    box_vectors = conf.getPeriodicBoxVectors()
 
     # includeDir = parent of minimize/ (where the FF folder lives, e.g. a99SBdisp.ff/)
     top = GromacsTopFileWithSoftcore(
@@ -204,7 +207,7 @@ def run_minimization(
 
     # ── Stage 2: Softcore (progressive lambda) ────────────────────────────
     lambda_values = _get_lambda_values(optimization_level)
-    add_implicit   = ff_type.upper() == "AMBER"
+    add_implicit = ff_type.upper() == "AMBER"
 
     for step_num, lam in enumerate(lambda_values, 1):
         system_sc = top.createSystem(
@@ -216,7 +219,9 @@ def run_minimization(
             salt_conc=salt_conc,
             soft_lambda=lam,
         )
-        integ = LangevinIntegrator(300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond)
+        integ = LangevinIntegrator(
+            300 * unit.kelvin, 1.0 / unit.picosecond, 0.002 * unit.picosecond
+        )
         integ.setRandomNumberSeed(random.randint(0, 2**31 - 1))
         sim = Simulation(top.topology, system_sc, integ, platform, properties)
         sim.context.setPositions(current_positions)
@@ -272,7 +277,7 @@ def run_minimization(
     gc.collect()
 
     total_steps = 1 + len(lambda_values) + 1
-    step_info   = f"{optimization_level.capitalize()} ({total_steps} steps)"
+    step_info = f"{optimization_level.capitalize()} ({total_steps} steps)"
     print(f"  Optimization: {step_info}", flush=True)
     print("\n  Done!", flush=True)
 

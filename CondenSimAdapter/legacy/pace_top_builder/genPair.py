@@ -7,13 +7,13 @@ class GromacsAtom:
     def __init__(self, input_string):
         parts = input_string.split()
         if len(parts) >= 8:
-            self.nr = int(parts[0])               
-            self.atom_type = parts[1]             
-            self.resnr = int(parts[2])            
-            self.residue = parts[3]               
-            self.atom_name = parts[4]             
-            self.charge = float(parts[6])         
-            self.mass = float(parts[7])           
+            self.nr = int(parts[0])
+            self.atom_type = parts[1]
+            self.resnr = int(parts[2])
+            self.residue = parts[3]
+            self.atom_name = parts[4]
+            self.charge = float(parts[6])
+            self.mass = float(parts[7])
         else:
             raise ValueError("Invalid input string format")
 
@@ -23,7 +23,7 @@ class GromacsAtom:
                f"Charge: {self.charge}, Mass: {self.mass}"
 
 
-    
+
 
 
 
@@ -42,14 +42,14 @@ def find_atom(residue, atn):
     # find an atom by name in a certain residue
     for atom in residue:
         if atom.atom_name == atn:
-            return atom.nr 
+            return atom.nr
     return 0
 
 def find_O_atom(residue, atn):
     # find an atom by name in a certain residue
     for atom in residue:
         if atom.atom_name == atn:
-            return atom.nr 
+            return atom.nr
         elif atom.atom_name == 'OT1' and atom.atom_type == 'OCT':
             return atom.nr
     return 0
@@ -59,7 +59,7 @@ def find_CA_atom(residue, atn):
     # find an atom by name in a certain residue
     for atom in residue:
         if atom.atom_name == atn:
-            return atom.nr 
+            return atom.nr
         elif atom.residue == 'FMO' and atom.atom_name == 'OM':
             return atom.nr
     return 0
@@ -78,18 +78,18 @@ for rl in f:
         continue
     if rl.startswith('[ bonds'):
         atomFlag = False
-    if atomFlag:    
+    if atomFlag:
         atomlist.append(GromacsAtom(rl))
 f.close()
 
 def recount_residue(atomlist):
-    residue_number = 1 
+    residue_number = 1
     last_residue_number = atomlist[0].resnr
     for atom in atomlist:
         if atom.resnr != last_residue_number:
             residue_number += 1
             last_residue_number = atom.resnr
-        
+
         atom.resnr = residue_number
 
     return atomlist
@@ -99,9 +99,9 @@ for atom in atom_list:
     print (atom.resnr, atom.atom_name,  atom.residue)
 
 
-nres = atomlist[-1].resnr 
+nres = atomlist[-1].resnr
 
-atoms_in_each_residues, residues = atoms_in_residue(atomlist, nres=nres) 
+atoms_in_each_residues, residues = atoms_in_residue(atomlist, nres=nres)
 residues.append('nothing')
 
 
@@ -149,23 +149,23 @@ for i in range(0, nres ):
     CD2[i] = find_atom(atoms_in_each_residues[i],'CD2')
     AUX[i] = find_atom(atoms_in_each_residues[i],'AUXL')
     OG1[i] = find_atom(atoms_in_each_residues[i],'OG1')
-    OD1[i] = find_atom(atoms_in_each_residues[i],'OD1')   
+    OD1[i] = find_atom(atoms_in_each_residues[i],'OD1')
     OD2[i] = find_atom(atoms_in_each_residues[i],'OD2')
     HD1[i] = find_atom(atoms_in_each_residues[i],'HD1')
     ND1[i] = find_atom(atoms_in_each_residues[i],'ND1')
     ND2[i] = find_atom(atoms_in_each_residues[i],'ND2')
-    HD21[i] = find_atom(atoms_in_each_residues[i],'HD21')    
-    HD22[i] = find_atom(atoms_in_each_residues[i],'HD22')   
+    HD21[i] = find_atom(atoms_in_each_residues[i],'HD21')
+    HD22[i] = find_atom(atoms_in_each_residues[i],'HD22')
     HG1[i] = find_atom(atoms_in_each_residues[i],'HG1')
     HG[i] = find_atom(atoms_in_each_residues[i],'HG')
 
     print ("{:s} CA:{:d} C:{:d} O:{:d} N:{:d} H:{:d} CB:{:d} CG1:{:d} CG2:{:d} CG:{:d} OG:{:d} OG1:{:d} OE:{:d} NE:{:d} CD1:{:d} CD2:{:d}OD1:{:d} OD2:{:d} HD1:{:d} ND1:{:d} ND2:{:d} HG:{:d} HG1:{:d}".format( residues[i], CA[i],\
         C[i], O[i],NH[i],H[i],CB[i],CG1[i],CG2[i],CG[i],OG[i],OG1[i],OE[i],NE[i],CD1[i],CD2[i],OD1[i],OD2[i],HD1[i],ND1[i],ND2[i],HG[i],HG1[i]))
-    
+
 print ("[ exclusions ]")
 # strcmp() == 0 mean "==" strcmp() != 0 mean '!='
 nres0 = nres
-nres = nres 
+nres = nres
 for i in range(0, nres):
     # i is res_index
     if (i <= nres - 4) :
@@ -174,13 +174,13 @@ for i in range(0, nres):
         if (CA[i] > 0) and (CA[i + 4]>0) and (residues[i+4] =='GLY'):
             print ("{}    {}   ;  0.671  0.50 GLY nm".format(CA[i], CA[i+4]))
     if (i <= nres - 3):
-        if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):   
+        if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):
             if ((O[i] >0) and NH[i+3] > 0):
-                print("{}    {}  ;  Oi-Ni+3 ".format(O[i], NH[i+3])) 
+                print("{}    {}  ;  Oi-Ni+3 ".format(O[i], NH[i+3]))
     if (i <= nres-4):
-        if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):   
+        if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):
             if ((O[i] >0) and NH[i+4] > 0):
-                print("{}    {}  ;  Oi-Ni+4 ".format(O[i], NH[i+4]))         
+                print("{}    {}  ;  Oi-Ni+4 ".format(O[i], NH[i+4]))
 
     #correct for gamma particles:
     if (OG[i] > 0) and (H[i] > 0):
@@ -188,9 +188,9 @@ for i in range(0, nres):
     if (OG[i] > 0) and (O[i] > 0):
         print('{}    {}'.format(OG[i], O[i]))
     if (OG[i] > 0) and (NH[i+1] > 0):
-        print('{}    {}'.format(OG[i], NH[i+1])) 
+        print('{}    {}'.format(OG[i], NH[i+1]))
     if (OG[i] > 0) and (H[i+1] > 0):
-        print('{}    {}'.format(OG[i], H[i+1]))                
+        print('{}    {}'.format(OG[i], H[i+1]))
     if (i >= 1):
         if (OG[i] >0) and (O[i-1] > 0):
             print('{}    {}'.format(OG[i], O[i-1]))
@@ -200,18 +200,18 @@ for i in range(0, nres):
     if (HG[i] > 0) and (O[i] > 0):
         print('{}    {}'.format(HG[i], O[i]))
     if (HG[i] > 0) and (NH[i+1] > 0):
-        print('{}    {}'.format(HG[i], NH[i+1])) 
+        print('{}    {}'.format(HG[i], NH[i+1]))
     if (HG[i] > 0) and (H[i+1] > 0):
-        print('{}    {}'.format(HG[i], H[i+1]))                
+        print('{}    {}'.format(HG[i], H[i+1]))
     if (i >= 1):
         if (HG[i] >0) and (O[i-1] > 0):
             print('{}    {}'.format(HG[i], O[i-1]))
 
-    # og1 
+    # og1
     if ((OG1[i]>0) and (H[i]>0)):
         print('{}    {}'.format(OG1[i], H[i]))
     if ((OG1[i]>0) and (O[i] > 0)):
-        print('{}    {}'.format(OG1[i], O[i])) 
+        print('{}    {}'.format(OG1[i], O[i]))
     if ((OG1[i]>0) and (NH[i+1]>0)):
         print('{}    {}'.format(OG1[i], NH[i+1]))
     if ((OG1[i]>0) and (H[i+1]>0)):
@@ -224,7 +224,7 @@ for i in range(0, nres):
     if ((HG1[i]>0) and (H[i]>0)):
         print('{}    {}'.format(HG1[i], H[i]))
     if ((HG1[i]>0) and (O[i] > 0)):
-        print('{}    {}'.format(HG1[i], O[i])) 
+        print('{}    {}'.format(HG1[i], O[i]))
     if ((HG1[i]>0) and (NH[i+1]>0)):
         print('{}    {}'.format(HG1[i], NH[i+1]))
     if ((HG1[i]>0) and (H[i+1]>0)):
@@ -256,7 +256,7 @@ for i in range(0, nres):
             if ((OD1[i] >0 ) and (H[i] >0)):
                 print("{}    {} ;  OD1-Hi asx".format(OD1[i], H[i]))
             if ((OD1[i] >0 ) and (H[i+1] >0)):
-                print("{}    {} ;  OD1-Hi+1 asx".format(OD1[i], H[i+1]))                     
+                print("{}    {} ;  OD1-Hi+1 asx".format(OD1[i], H[i+1]))
             if ((OD2[i] >0 ) and (H[i] >0)):
                 print("{}    {} ;  OD2-Hi asx".format(OD2[i], H[i]))
             if ((OD2[i] >0 ) and (H[i+1] >0)):
@@ -279,22 +279,22 @@ for i in range(0, nres):
         if ((CD2[i]>0) and (H[i]>0)):
             print ('{}    {}'.format(CD2[i], H[i]))
         if ((CD1[i]>0) and (NH[i]>0)):
-            print ('{}    {}'.format(CD1[i], NH[i]))    
+            print ('{}    {}'.format(CD1[i], NH[i]))
         if ((ND1[i]>0) and (NH[i]>0)):
-            print ('{}    {}'.format(ND1[i], NH[i]))           
+            print ('{}    {}'.format(ND1[i], NH[i]))
         if ((CD2[i]>0) and (NH[i]>0)):
-            print ('{}    {}'.format(CD2[i], NH[i]))          
+            print ('{}    {}'.format(CD2[i], NH[i]))
         if i >= 1:
             if ((CD1[i] > 0) and (O[i-1]>0)):
-                print ('{}    {}'.format(CD1[i], O[i-1])) 
+                print ('{}    {}'.format(CD1[i], O[i-1]))
             if ((CD2[i] > 0) and (O[i-1]>0)):
                 print ('{}    {}'.format(CD2[i], O[i-1]))
         if ((CD1[i]>0) and (NH[i+1]>0)):
             print ('{}    {}'.format(CD1[i], NH[i+1]))
-        if ((ND1[i]>0) and (NH[i+1]>0)):  
-            print ('{}    {}'.format(ND1[i], NH[i+1])) 
+        if ((ND1[i]>0) and (NH[i+1]>0)):
+            print ('{}    {}'.format(ND1[i], NH[i+1]))
         if ((CD2[i]>0) and (NH[i+1]>0)):
-            print ('{}    {}'.format(CD2[i], NH[i+1]))        
+            print ('{}    {}'.format(CD2[i], NH[i+1]))
     else:
         if((CG[i]>0) and (H[i]>0)):
             print ('{}    {}'.format(CG[i], H[i]))
@@ -308,7 +308,7 @@ for i in range(0, nres):
         print ('{}    {}'.format(CG2[i], H[i]))
     if((CG2[i]>0) and (H[i+1]>0)):
         print ('{}    {}'.format(CG2[i], H[i+1]))
-    
+
     if((NH[i]>0) and (C[i+1]>0)):
         print ('{}    {}'.format(NH[i], C[i+1]))
     if((O[i]>0) and (O[i+1]>0)):
@@ -339,20 +339,20 @@ for i in range(0, nres):
         if ((C[i]>0) and (NH[i+2]>0)):
             print ("{}    {}".format(C[i], NH[i+2]))
         if ((O[i]>0) and (CA[i+2]>0)):
-            print ("{}    {}".format(O[i], CA[i+2])) 
+            print ("{}    {}".format(O[i], CA[i+2]))
         if ((O[i]>0) and (NH[i+2]>0)):
             print ("{}    {}".format(O[i], NH[i+2]))
         if ((CA[i]>0) and (CA[i+2]>0)):
-            print ("{}    {}".format(CA[i], CA[i+2]))  
+            print ("{}    {}".format(CA[i], CA[i+2]))
         if ((CA[i]>0) and (C[i+2]>0)):
             print ("{}    {}".format(CA[i], C[i+2]))
         if ((C[i]>0) and (CA[i+2]>0)):
             print ("{}    {}".format(C[i], CA[i+2]))
         if ((C[i]>0) and (C[i+2]>0)):
-            print ("{}    {}".format(C[i], C[i+2]))     
+            print ("{}    {}".format(C[i], C[i+2]))
         if (i >= 1):
             if ((C[i-1]>0) and  (O[i+2]>0)):
-                print ("{}    {}".format(C[i-1], O[i+2])) 
+                print ("{}    {}".format(C[i-1], O[i+2]))
 
 print ("[ pairs ]")
 for i in range(0, nres):
@@ -361,47 +361,47 @@ for i in range(0, nres):
         if (CA[i] > 0) and (CB[i + 4]>0):
             print ('{}    {}  1  2.89314E-02 3.11858E-04  ;CAi-CBi+4  0.671  0.47 nm'.format(CA[i], CB[i+4]))
         if (CA[i] > 0) and (CA[i + 4]>0) and (residues[i+4] =='GLY'):
-            print ("{}    {}  1  4.19375E-02  6.55273E-04  ;CAi CAi+4 GLY  0.671  0.50  nm".format(CA[i], CA[i+4]))    
+            print ("{}    {}  1  4.19375E-02  6.55273E-04  ;CAi CAi+4 GLY  0.671  0.50  nm".format(CA[i], CA[i+4]))
     # refinforce Oi-Ni+3 HB for turn
     if residues[i] != 'FMO':
         if (i <= nres - 3):
-            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):   
+            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):
                 if ((O[i] >0) and NH[i+3] > 0):
                     print("{}    {}  1  8.427637e-03   1.610547e-06;  Oi-Ni+3 14.7 0.24nm".format(O[i], NH[i+3])) # 1.123685E-02    2.147396E-06
         if (i <= nres-4):
-            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):   
+            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):
                 if ((O[i] >0) and NH[i+4] > 0):
-                    print("{}    {}  1  8.427637e-03   1.610547e-06;  Oi-Ni+4  14.7 0.24nm".format(O[i], NH[i+4]))       
+                    print("{}    {}  1  8.427637e-03   1.610547e-06;  Oi-Ni+4  14.7 0.24nm".format(O[i], NH[i+4]))
     else:
         if (i <= nres - 3):
-            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):   
+            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):
                 if ((O[i] >0) and NH[i+3] > 0):
-                    print("{}    {}  1  6.742110e-03   1.288438e-06 ;  Oi-Ni+3 8.8 0.24nm FMO weaker HB".format(O[i], NH[i+3])) 
+                    print("{}    {}  1  6.742110e-03   1.288438e-06 ;  Oi-Ni+3 8.8 0.24nm FMO weaker HB".format(O[i], NH[i+3]))
         if (i <= nres-4):
-            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):    
+            if (residues[i+3] != 'PRO') and (residues[i+3] != 'DPR'):
                 if ((O[i] >0) and NH[i+4] > 0):
-                    print("{}    {}  1  6.742110e-03   1.288438e-06 ;  Oi-Ni+4  8.8 0.24nm FMO weaker HB".format(O[i], NH[i+4]))           
+                    print("{}    {}  1  6.742110e-03   1.288438e-06 ;  Oi-Ni+4  8.8 0.24nm FMO weaker HB".format(O[i], NH[i+4]))
     # correct for gamma particles
     if (OG[i] > 0) and (H[i] > 0):
         print('{}    {}  1  1.13380E-03  1.28550E-07 ; OG-H 2.5 0.22 nm '.format(OG[i], H[i]))
     if (OG[i] > 0) and (O[i] > 0):
         print('{}    {}  1 7.74841E-04   1.50095E-06 ; OG-Oi  2.5  0.27 nm  rep'.format(OG[i], O[i]))
     if (OG[i] > 0) and (NH[i+1] > 0):
-        print('{}    {}  1  3.83970E-03  4.12285E-06 ;   OGi-Ni+1  0.894 0.32nm'.format(OG[i], NH[i+1])) 
+        print('{}    {}  1  3.83970E-03  4.12285E-06 ;   OGi-Ni+1  0.894 0.32nm'.format(OG[i], NH[i+1]))
     if (OG[i] > 0) and (H[i+1] > 0):
-        print('{}    {}  1  1.13380E-03  1.28550E-07  ;  OGi-Hi+1 2.5  0.22nm'.format(OG[i], H[i+1]))                
+        print('{}    {}  1  1.13380E-03  1.28550E-07  ;  OGi-Hi+1 2.5  0.22nm'.format(OG[i], H[i+1]))
     if (i >= 1):
         if (OG[i] >0) and (O[i-1] > 0):
             print('{}    {}  1  3.87420E-03   1.50095E-06 ;  OGi-Oi-1 2.5  0.27nm'.format(OG[i], O[i-1]))
-    # HG exclusion        
+    # HG exclusion
     if (HG[i] > 0) and (H[i] > 0):
         print('{}    {}  1     0     0 ; HG serine exclusion '.format(HG[i], H[i]))
     if (HG[i] > 0) and (O[i] > 0):
         print('{}    {}  1     0     0 ; HG serine exclusion'.format(HG[i], O[i]))
     if (HG[i] > 0) and (NH[i+1] > 0):
-        print('{}    {}  1     0     0 ;   HG serine exclusion'.format(HG[i], NH[i+1])) 
+        print('{}    {}  1     0     0 ;   HG serine exclusion'.format(HG[i], NH[i+1]))
     if (HG[i] > 0) and (H[i+1] > 0):
-        print('{}    {}  1     0     0  ;  HG serine exclusion'.format(HG[i], H[i+1]))                
+        print('{}    {}  1     0     0  ;  HG serine exclusion'.format(HG[i], H[i+1]))
     if (i >= 1):
         if (HG[i] >0) and (O[i-1] > 0):
             print('{}    {}  1     0     0  ; HG serine exclusion'.format(HG[i], O[i-1]))
@@ -409,7 +409,7 @@ for i in range(0, nres):
     if ((OG1[i]>0) and (H[i]>0)):
         print('{}    {}  1  2.26760E-04  1.28550E-07  ; OG1-Hi  0.1 0.287685nm rep'.format(OG1[i], H[i]))
     if ((OG1[i]>0) and (O[i] > 0)):
-        print('{}    {}  1  7.74841E-04   1.50095E-06 ; OG1-Oi 0.1 0.353068nm rep'.format(OG1[i], O[i])) 
+        print('{}    {}  1  7.74841E-04   1.50095E-06 ; OG1-Oi 0.1 0.353068nm rep'.format(OG1[i], O[i]))
     if ((OG1[i]>0) and (NH[i+1]>0)):
         print('{}    {}  1  3.83970E-03  4.12285E-06 ;  OG1-Ni+1  0.894 0.32nm'.format(OG1[i], NH[i+1]))
     if ((OG1[i]>0) and (H[i+1]>0)):
@@ -421,7 +421,7 @@ for i in range(0, nres):
     if ((HG1[i]>0) and (H[i]>0)):
         print('{}    {}  1 0 0 ;  HG1 threonine exclusion'.format(HG1[i], H[i]))
     if ((HG1[i]>0) and (O[i] > 0)):
-        print('{}    {}  1 0 0 ;  HG1 threonine exclusion'.format(HG1[i], O[i])) 
+        print('{}    {}  1 0 0 ;  HG1 threonine exclusion'.format(HG1[i], O[i]))
     if ((HG1[i]>0) and (NH[i+1]>0)):
         print('{}    {}  1 0 0 ;  HG1 threonine exclusion'.format(HG1[i], NH[i+1]))
     if ((HG1[i]>0) and (H[i+1]>0)):
@@ -453,7 +453,7 @@ for i in range(0, nres):
             if ((OD1[i] >0 ) and (H[i] >0)):
                 print("{}    {}   1  1.275068E-03  2.139210E-08 ;  OD1-Hi 19.0 0.16nm asx".format(OD1[i], H[i]))
             if ((OD1[i] >0 ) and (H[i+1] >0)):
-                print("{}    {}   1  1.275068E-03  2.139210E-08 ;  OD1-Hi+1 19.0 0.16nm asx".format(OD1[i], H[i+1]))                     
+                print("{}    {}   1  1.275068E-03  2.139210E-08 ;  OD1-Hi+1 19.0 0.16nm asx".format(OD1[i], H[i+1]))
             if ((OD2[i] >0 ) and (H[i] >0)):
                 print("{}    {}   1  1.275068E-03  2.139210E-08 ;  OD2-Hi 19.0 0.16nm asx".format(OD2[i], H[i]))
             if ((OD2[i] >0 ) and (H[i+1] >0)):
@@ -463,7 +463,7 @@ for i in range(0, nres):
     #PHE, TYR, TRP, HIS sidechain
     # HIS[:3]
     elif (residues[i] == 'PHE') or (residues[i] == 'TYR') or (residues[i] == 'TRP') or (residues[i][:3] == 'HIS'):
-        
+
         if ((CG[i] > 0) and (H[i] > 0)):
             print ('{}    {}  1  6.53184E-04  4.76171E-07  ;  CG-Hi 0.224 0.30nm aro'.format(CG[i], H[i]))
         if ((CG[i] > 0) and (H[i+1] > 0)):
@@ -477,28 +477,28 @@ for i in range(0, nres):
         if ((CD2[i]>0) and (H[i]>0)):
             print ('{}    {} 1  6.53184E-04  4.76171E-07  ;  Hi-CD2 0.224 0.30nm aro'.format(CD2[i], H[i]))
         if ((CD1[i]>0) and (NH[i]>0)):
-            print ('{}    {}   1  1.30345E-03   9.50217E-07  ;  CD1-Ni 0.447 0.30nm aro'.format(CD1[i], NH[i]))    
+            print ('{}    {}   1  1.30345E-03   9.50217E-07  ;  CD1-Ni 0.447 0.30nm aro'.format(CD1[i], NH[i]))
         if ((ND1[i]>0) and (NH[i]>0)):
-            print ('{}    {}   1  1.30345E-03   9.50217E-07  ;  ND1-Ni 0.447 0.30nm aro'.format(ND1[i], NH[i]))           
+            print ('{}    {}   1  1.30345E-03   9.50217E-07  ;  ND1-Ni 0.447 0.30nm aro'.format(ND1[i], NH[i]))
         if ((CD2[i]>0) and (NH[i]>0)):
-            print ('{}    {}   1  1.30345E-03   9.50217E-07  ;  CD2-Ni 0.447 0.30nm aro'.format(CD2[i], NH[i]))          
+            print ('{}    {}   1  1.30345E-03   9.50217E-07  ;  CD2-Ni 0.447 0.30nm aro'.format(CD2[i], NH[i]))
         if i >= 1:
             if ((CD1[i] > 0) and (O[i-1]>0)):
-                print ('{}    {}   1     1.06354E-03  6.32621E-07  ;   CD1-Oi-1 0.447 0.29nm  aro'.format(CD1[i], O[i-1])) 
+                print ('{}    {}   1     1.06354E-03  6.32621E-07  ;   CD1-Oi-1 0.447 0.29nm  aro'.format(CD1[i], O[i-1]))
             if ((CD2[i] > 0) and (O[i-1]>0)):
                 print ('{}    {}   1     1.06354E-03  6.32621E-07  ;   CD2-Oi-1 0.447 0.29nm aro'.format(CD2[i], O[i-1]))
         if ((CD1[i]>0) and (NH[i+1]>0)):
             print ('{}    {}   1  2.76211E-03  4.26692E-06  ;  CD1-Ni+1 0.447 0.34nm aro'.format(CD1[i], NH[i+1]))
-        if ((ND1[i]>0) and (NH[i+1]>0)):  
-            print ('{}    {}   1  2.76211E-03  4.26692E-06  ;  ND1-Ni+1 0.447 0.34nm aro'.format(ND1[i], NH[i+1])) 
+        if ((ND1[i]>0) and (NH[i+1]>0)):
+            print ('{}    {}   1  2.76211E-03  4.26692E-06  ;  ND1-Ni+1 0.447 0.34nm aro'.format(ND1[i], NH[i+1]))
         if ((CD2[i]>0) and (NH[i+1]>0)):
-            print ('{}    {}   1  2.76211E-03  4.26692E-06  ;  CD2-Ni+1 0.447 0.34nm aro'.format(CD2[i], NH[i+1])) 
+            print ('{}    {}   1  2.76211E-03  4.26692E-06  ;  CD2-Ni+1 0.447 0.34nm aro'.format(CD2[i], NH[i+1]))
     else:
         if((CG[i]>0) and (H[i]>0)):
             print ('{}    {}  1    1.74675E-03   1.70645E-06      ; Hi-CGi  0.2 0.24nm rep'.format(CG[i], H[i]))
         if((CG[i]>0) and (H[i+1]>0)):
             print ('{}    {}  1    1.74675E-03   1.70645E-06      ; Hi+1-CGi  0.2 0.24nm rep'.format(CG[i], H[i+1]))
-    
+
     if((CG1[i]>0) and (H[i]>0)):
         print ('{}    {}  1  1.06354E-03  6.32621E-07      ; Hi-CGi H 0.2 0.24nm rep'.format(CG1[i], H[i]))
     if((CG1[i]>0) and (H[i+1]>0)):
@@ -527,7 +527,7 @@ for i in range(0, nres):
         print ('{}    {}  1    2.49170E-03   6.92920E-06  ; CAi-Ci+1  0.45  0.375nm'.format(CA[i], C[i+1]))
     if((CB[i]>0) and (H[i+1]>0)):
         print ("{}    {}  1    1.74675E-03   1.70645E-06  ; CB-Hi+1  0.2 0.24 nm rep".format( CB[i],  H[i+1]))
-    
+
     if (i <= nres - 2):
         if ((NH[i]>0) and (C[i+2]>0)):
             print ("{}    {}  1    3.37244E-03   5.68668E-06 ; Ni-Ci+2 0.671 0.345nm".format(NH[i], C[i+2]))
@@ -540,18 +540,18 @@ for i in range(0, nres):
         if ((C[i]>0) and (NH[i+2]>0)):
             print ("{}    {}  1     3.37244E-03   5.68668E-06 ; Ci-NHi+2 0.671 0.345nm".format(C[i], NH[i+2]))
         if ((O[i]>0) and (CA[i+2]>0)):
-            print ("{}    {}  1    2.26146E-03   3.19637E-06  ; Oi-CAi+2 0.6  0.335nm".format(O[i], CA[i+2])) 
-        
+            print ("{}    {}  1    2.26146E-03   3.19637E-06  ; Oi-CAi+2 0.6  0.335nm".format(O[i], CA[i+2]))
+
         if ((O[i]>0) and (NH[i+2]>0)):
             print ("{}    {}  1    1.10468E-03   3.41254E-07 ; Oi-Ni+2 0.894 0.26nm".format(O[i], NH[i+2]))
         if ((CA[i]>0) and (CA[i+2]>0)):
-            print ("{}    {}  1    2.81500E-03   9.90525E-06 ; CAi-CAi+2 0.45  0.39nm".format(CA[i], CA[i+2]))  
+            print ("{}    {}  1    2.81500E-03   9.90525E-06 ; CAi-CAi+2 0.45  0.39nm".format(CA[i], CA[i+2]))
         if ((CA[i]>0) and (C[i+2]>0)):
             print ("{}    {}  1    2.49170E-03   6.92920E-06  ; CAi-Ci+2 0.45  0.375nm".format(CA[i], C[i+2]))
         if ((C[i]>0) and (CA[i+2]>0)):
             print ("{}    {}  1    2.49170E-03   6.92920E-06  ; Ci-CAi+2 0.45  0.375nm".format(C[i], CA[i+2]))
         if ((C[i]>0) and (C[i+2]>0)):
-            print ("{}    {}  1    2.17678E-03   4.73838E-06  ; Ci-Ci+2 0.45  0.36nm".format(C[i], C[i+2]))     
+            print ("{}    {}  1    2.17678E-03   4.73838E-06  ; Ci-Ci+2 0.45  0.36nm".format(C[i], C[i+2]))
         if (i >= 1):
             if ((C[i-1]>0) and  (O[i+2]>0)):
                 print ("{}    {}  1     1.91985E-03   2.06142E-06   ; 0.6  0.32 nm".format(C[i-1], O[i+2]))
@@ -566,9 +566,9 @@ for i in range(0, nres):
             print ("{}    {}  1     7.83407E-04   8.59933E-07 ; FMO".format(O[i], C[i+1]))
         if (CA[i] > 0 and C[i+1] > 0):
             print ("{}    {}  1    1.42390E-02   2.50539E-04 ; FMO".format(CA[i], C[i+1]))
-      
 
-print ("[ impropers ]") 
+
+print ("[ impropers ]")
 for i in range(0, nres):
     if ((C[i]>0) and (O[i]>0) and (NH[i+1]>0) and (CA[i+1]>0)):
         print("{}  {}  {}  {}  2  0.0 75.0".format(O[i], C[i], NH[i+1], CA[i+1]))

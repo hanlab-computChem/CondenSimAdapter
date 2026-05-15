@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
-import torch
-import torch.nn as nn
+from typing import Optional
 
 import dgl
-
-from typing import Optional
+import torch
+import torch.nn as nn
 
 from . import Fiber, SE3Transformer
 from .layers import LinearSE3, NormSE3
@@ -55,8 +54,8 @@ class LinearModule(nn.Module):
             linear_module.append(LinearSE3(Fiber(fiber_hidden), Fiber(fiber_out)))
         else:
             if use_norm:
-                linear_module.append(NormSE3(Fiber(fiber_init), nonlinearity=nonlinearity))
-            linear_module.append(LinearSE3(Fiber(fiber_init), Fiber(fiber_out)))
+                linear_module.append(NormSE3(Fiber(fiber_in), nonlinearity=nonlinearity))
+            linear_module.append(LinearSE3(Fiber(fiber_in), Fiber(fiber_out)))
         #
         self.linear_module = nn.Sequential(*linear_module)
 

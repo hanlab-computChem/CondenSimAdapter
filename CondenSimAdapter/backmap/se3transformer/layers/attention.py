@@ -21,6 +21,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES
 # SPDX-License-Identifier: MIT
 
+from typing import Dict, Optional, Union
+
 import dgl
 import numpy as np
 import torch
@@ -28,16 +30,15 @@ import torch.nn as nn
 from dgl import DGLGraph
 from dgl.ops import edge_softmax
 from torch import Tensor
-from typing import Dict, Optional, Union
 
 from ..fiber import Fiber
-from .convolution import ConvSE3, ConvSE3FuseLevel
-from .linear import LinearSE3
 from ..utils import (
-    degree_to_dim,
     aggregate_residual,
+    degree_to_dim,
     unfuse_features,
 )
+from .convolution import ConvSE3, ConvSE3FuseLevel
+from .linear import LinearSE3
 
 
 class AttentionSE3(nn.Module):

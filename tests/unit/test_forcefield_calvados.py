@@ -10,7 +10,6 @@ Tests cover:
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 pytest.importorskip("openmm")
@@ -21,10 +20,10 @@ import openmm.unit as unit
 
 from CondenSimAdapter.core.forcefield.calvados import CalvadosFF
 
-
 # =============================================================================
 # Initialization Tests
 # =============================================================================
+
 
 class TestCalvadosInitialization:
     """Tests for CalvadosFF initialization."""
@@ -74,6 +73,7 @@ class TestCalvadosInitialization:
 # Parameter Value Tests
 # =============================================================================
 
+
 class TestCalvadosParameters:
     """Tests for parameter values."""
 
@@ -114,20 +114,21 @@ class TestCalvadosParameters:
         """Test that v2 and v3 have some different parameters."""
         ff2 = CalvadosFF(version=2)
         ff3 = CalvadosFF(version=3)
-        
+
         # At least some parameters should differ between versions
         differences = []
         for aa in ff2._params:
             for key in ["sigma", "lambda", "q", "mass", "r0"]:
                 if ff2._params[aa][key] != ff3._params[aa][key]:
                     differences.append((aa, key))
-        
+
         assert len(differences) > 0, "Expected some differences between v2 and v3"
 
 
 # =============================================================================
 # Add Masses Tests
 # =============================================================================
+
 
 class TestAddMasses:
     """Tests for add_masses method."""
@@ -136,16 +137,16 @@ class TestAddMasses:
         """Test that correct masses are added based on sequence."""
         ff = CalvadosFF(version=2)
         system = mm.System()
-        
+
         chain_meta = [{"name": "test", "sequence": "AG"}]
         ff.add_masses(system, chain_meta)
-        
+
         assert system.getNumParticles() == 2
-        
+
         # Check masses match parameter values
         mass_a = system.getParticleMass(0).value_in_unit(unit.amu)
         mass_g = system.getParticleMass(1).value_in_unit(unit.amu)
-        
+
         assert mass_a == pytest.approx(ff._params["A"]["mass"], abs=1e-6)
         assert mass_g == pytest.approx(ff._params["G"]["mass"], abs=1e-6)
 
@@ -153,6 +154,7 @@ class TestAddMasses:
 # =============================================================================
 # Nonbonded Forces Tests
 # =============================================================================
+
 
 class TestCreateNonbondedForces:
     """Tests for create_nonbonded_forces method."""
@@ -162,25 +164,27 @@ class TestCreateNonbondedForces:
         """Create a simple 3-residue topology."""
         top = app.Topology()
         chain = top.addChain()
-        
+
         for res_name in ["ALA", "GLY", "SER"]:
             res = top.addResidue(res_name, chain)
             top.addAtom("CA", app.element.carbon, res)
-        
+
         # Add bonds
         atoms = list(top.atoms())
         top.addBond(atoms[0], atoms[1])
         top.addBond(atoms[1], atoms[2])
-        
+
         return top
 
     @pytest.fixture
     def chain_meta(self):
         """Simple chain metadata."""
-        return [{
-            "name": "test",
-            "sequence": "AGS",
-        }]
+        return [
+            {
+                "name": "test",
+                "sequence": "AGS",
+            }
+        ]
 
     def test_returns_two_forces(self, simple_topology, chain_meta):
         """Test that two forces are returned (AH + Yukawa)."""
@@ -266,6 +270,7 @@ class TestCreateNonbondedForces:
 # Harmonic Bonds Tests
 # =============================================================================
 
+
 class TestBuildHarmonicBonds:
     """Tests for build_harmonic_bonds method."""
 
@@ -274,29 +279,29 @@ class TestBuildHarmonicBonds:
         """Create topology with different residue types."""
         top = app.Topology()
         chain = top.addChain()
-        
+
         residues = ["ALA", "GLY", "ALA"]
         atoms = []
         for res_name in residues:
             res = top.addResidue(res_name, chain)
             atom = top.addAtom("CA", app.element.carbon, res)
             atoms.append(atom)
-        
+
         # Add bonds
         top.addBond(atoms[0], atoms[1])
         top.addBond(atoms[1], atoms[2])
-        
+
         return top
 
     def test_uses_per_residue_r0(self, topology_with_different_residues):
         """Test that per-residue r0 values are used."""
         ff = CalvadosFF(version=2)
         force = ff.build_harmonic_bonds(topology_with_different_residues)
-        
+
         # Each bond should have r0 from the first residue's parameters
         a1, a2, length1, k1 = force.getBondParameters(0)
         a3, a4, length2, k2 = force.getBondParameters(1)
-        
+
         # ALA bond length should be used (both bonds start with ALA)
         expected_r0 = ff._params["A"]["r0"]
         assert length1.value_in_unit(unit.nanometer) == pytest.approx(expected_r0, abs=1e-6)
@@ -306,16 +311,17 @@ class TestBuildHarmonicBonds:
         """Test default spring constant is 8368 kJ/mol/nm^2."""
         ff = CalvadosFF(version=2)
         force = ff.build_harmonic_bonds(topology_with_different_residues)
-        
+
         a1, a2, length, k = force.getBondParameters(0)
         expected_k = 8368.0
-        actual_k = k.value_in_unit(unit.kilojoule_per_mole / unit.nanometer ** 2)
+        actual_k = k.value_in_unit(unit.kilojoule_per_mole / unit.nanometer**2)
         assert actual_k == pytest.approx(expected_k, abs=1e-6)
 
 
 # =============================================================================
 # Constants Tests
 # =============================================================================
+
 
 class TestCalvadosConstants:
     """Tests for class constants."""

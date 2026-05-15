@@ -1,4 +1,3 @@
-import os
 import sys
 
 top_name = sys.argv[1]

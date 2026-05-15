@@ -14,11 +14,10 @@ import pytest
 
 pytest.importorskip("openmm")
 
-import openmm as mm
 import openmm.app as app
 import openmm.unit as unit
 
-from CondenSimAdapter.core.forcefield.hps import HPSFF, _AA_ORDER, _N_AA
+from CondenSimAdapter.core.forcefield.hps import _AA_ORDER, _N_AA, HPSFF
 
 
 class TestHPSInitialization:
@@ -71,15 +70,15 @@ class TestHPSNonbondedForces:
         """Create a simple 3-residue topology."""
         top = app.Topology()
         chain = top.addChain()
-        
+
         for res_name in ["ALA", "GLY", "ASP"]:
             res = top.addResidue(res_name, chain)
             top.addAtom("CA", app.element.carbon, res)
-        
+
         atoms = list(top.atoms())
         top.addBond(atoms[0], atoms[1])
         top.addBond(atoms[1], atoms[2])
-        
+
         return top
 
     @pytest.fixture

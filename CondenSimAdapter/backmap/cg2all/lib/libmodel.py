@@ -2,9 +2,6 @@
 
 import sys
 import copy
-import functools
-import logging
-import numpy as np
 from typing import Optional, Tuple
 
 import torch
@@ -19,10 +16,8 @@ from CondenSimAdapter.backmap.se3transformer.layers import LinearSE3, NormSE3
 from .residue_constants import (
     MAX_SS,
     MAX_RESIDUE_TYPE,
-    MAX_ATOM,
     MAX_TORSION,
     MAX_RIGID,
-    ATOM_INDEX_CA,
     ATOM_INDEX_N,
     ATOM_INDEX_C,
     ATOM_INDEX_O,
@@ -35,14 +30,12 @@ from .residue_constants import (
 )
 from .libloss import loss_f, find_atomic_clash
 from .torch_basics import (
-    v_size,
     v_norm_safe,
     inner_product,
     rotate_matrix,
     rotate_vector,
 )
 from .libmetric import rmsd_CA, rmsd_rigid, rmsd_all, rmse_bonded
-from .libcg import get_residue_center_of_mass, get_backbone_angles
 from .libconfig import DTYPE
 
 
@@ -552,7 +545,6 @@ def build_structure(
     bb: torch.Tensor,
     sc: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    dtype = bb.dtype
     device = bb.device
     residue_type = batch.ndata["residue_type"]
     #

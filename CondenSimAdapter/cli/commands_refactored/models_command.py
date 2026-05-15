@@ -14,10 +14,9 @@ from __future__ import annotations
 import click
 
 from ...backmap.cg2all.model import (
-    list_models,
+    MODEL_URLS,
     ensure_models,
     print_model_status,
-    MODEL_URLS,
 )
 
 
@@ -37,9 +36,9 @@ def list_cmd():
 @click.argument("model_names", nargs=-1, required=False)
 def download_cmd(model_names):
     """Download model files.
-    
+
     If no model names are specified, downloads all models.
-    
+
     Examples:
         adapter models download                    # Download all
         adapter models download CalphaBasedModel   # Download specific
@@ -52,13 +51,13 @@ def download_cmd(model_names):
         # Validate model names
         available = set(MODEL_URLS.keys())
         for name in model_names:
-            if name not in available and not name.endswith('.ckpt'):
-                name = name + '.ckpt'
+            if name not in available and not name.endswith(".ckpt"):
+                name = name + ".ckpt"
             if name not in available:
                 click.echo(f"Error: Unknown model '{name}'", err=True)
                 click.echo(f"Available: {', '.join(available)}", err=True)
                 raise click.Abort()
-        
+
         print(f"Downloading: {', '.join(model_names)}")
         ensure_models(list(model_names))
 

@@ -12,16 +12,15 @@ import numpy as np
 import pytest
 
 from CondenSimAdapter.core.entanglement import (
+    EntanglementAnalyzer,
     _any_bond_pierces_triangle,
     _segment_pierces_triangle,
-    EntanglementAnalyzer,
-    EntanglementReport,
 )
-
 
 # =============================================================================
 # Geometric primitive tests
 # =============================================================================
+
 
 class TestSegmentPiercesTriangle:
     """Möller-Trumbore intersection tests."""
@@ -84,8 +83,13 @@ class TestAnyBondPiercesTriangle:
         empty = np.empty((0, 3), dtype=np.float64)
         box = np.array([10.0, 10.0, 10.0])
         assert not _any_bond_pierces_triangle(
-            np.zeros(3), np.ones(3), np.array([1.0, 0.0, 0.0]),
-            empty, empty, box, use_pbc=False,
+            np.zeros(3),
+            np.ones(3),
+            np.array([1.0, 0.0, 0.0]),
+            empty,
+            empty,
+            box,
+            use_pbc=False,
         )
 
     def test_pbc_crossing_bond(self):
@@ -99,13 +103,20 @@ class TestAnyBondPiercesTriangle:
         box = np.array([10.0, 10.0, 10.0])
         # The bond at z=9.5 is far from triangle at z≈1.5 (min image dist 8.0)
         assert not _any_bond_pierces_triangle(
-            v0, v1, v2, bond_as, bond_bs, box, use_pbc=True,
+            v0,
+            v1,
+            v2,
+            bond_as,
+            bond_bs,
+            box,
+            use_pbc=True,
         )
 
 
 # =============================================================================
 # EntanglementAnalyzer helper tests
 # =============================================================================
+
 
 class TestUnwrapChain:
     """PBC unwrapping logic."""
@@ -114,7 +125,10 @@ class TestUnwrapChain:
         """No PBC: chain is returned unchanged."""
         chain = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
         analyzer = EntanglementAnalyzer(
-            chain, [(0, 3)], box=[10.0, 10.0, 10.0], use_pbc=False,
+            chain,
+            [(0, 3)],
+            box=[10.0, 10.0, 10.0],
+            use_pbc=False,
         )
         unwrapped = analyzer._unwrap_chain(chain)
         np.testing.assert_array_almost_equal(unwrapped, chain)
@@ -123,7 +137,10 @@ class TestUnwrapChain:
         """A bead at box edge is unwrapped relative to predecessor."""
         chain = np.array([[9.5, 0.0, 0.0], [0.2, 0.0, 0.0], [1.0, 0.0, 0.0]])
         analyzer = EntanglementAnalyzer(
-            chain, [(0, 3)], box=[10.0, 10.0, 10.0], use_pbc=True,
+            chain,
+            [(0, 3)],
+            box=[10.0, 10.0, 10.0],
+            use_pbc=True,
         )
         unwrapped = analyzer._unwrap_chain(chain)
         # bead 1 should be at 10.2 (not 0.2) relative to bead 0 at 9.5
@@ -139,7 +156,10 @@ class TestInsertNodesOnLongSegments:
         """Segments shorter than lmax are untouched."""
         path = np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [1.0, 0.0, 0.0]])
         analyzer = EntanglementAnalyzer(
-            path, [(0, 3)], box=[10.0, 10.0, 10.0], lmax_factor=2.0,
+            path,
+            [(0, 3)],
+            box=[10.0, 10.0, 10.0],
+            lmax_factor=2.0,
         )
         # avg_bond = 0.5, lmax = 1.0, segments are 0.5 < 1.0
         new_path = analyzer._insert_nodes_on_long_segments(path)
@@ -149,7 +169,10 @@ class TestInsertNodesOnLongSegments:
         """A single long segment is bisected."""
         path = np.array([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [6.0, 0.0, 0.0]])
         analyzer = EntanglementAnalyzer(
-            path, [(0, 3)], box=[10.0, 10.0, 10.0], lmax_factor=0.5,
+            path,
+            [(0, 3)],
+            box=[10.0, 10.0, 10.0],
+            lmax_factor=0.5,
         )
         # avg_bond = 3.0, lmax = 1.5, segments are 3.0 > 1.5
         new_path = analyzer._insert_nodes_on_long_segments(path)
@@ -169,12 +192,20 @@ class TestIdentifyKinks:
         other_as = np.array([[1.0, 0.0, -0.1]])
         other_bs = np.array([[1.0, 0.0, 0.1]])
         analyzer = EntanglementAnalyzer(
-            path, [(0, 3)], box=[10.0, 10.0, 10.0],
-            thickness_factor=1.0, kinkdef1=5.0, kinkdef2=0.001,
+            path,
+            [(0, 3)],
+            box=[10.0, 10.0, 10.0],
+            thickness_factor=1.0,
+            kinkdef1=5.0,
+            kinkdef2=0.001,
         )
         # thickness = 1.0 * avg_bond ≈ 0.707, distcrit1 = 5 * 0.707 ≈ 3.54
         is_kink = analyzer._identify_kinks(
-            path, other_as, other_bs, np.array([10.0, 10.0, 10.0]), use_pbc=False,
+            path,
+            other_as,
+            other_bs,
+            np.array([10.0, 10.0, 10.0]),
+            use_pbc=False,
         )
         assert is_kink[0]
         assert is_kink[1]  # middle node is a kink
@@ -186,11 +217,19 @@ class TestIdentifyKinks:
         other_as = np.array([[10.0, 10.0, 10.0]])
         other_bs = np.array([[10.0, 10.0, 11.0]])
         analyzer = EntanglementAnalyzer(
-            path, [(0, 3)], box=[20.0, 20.0, 20.0],
-            thickness_factor=0.001, kinkdef1=5.0, kinkdef2=0.001,
+            path,
+            [(0, 3)],
+            box=[20.0, 20.0, 20.0],
+            thickness_factor=0.001,
+            kinkdef1=5.0,
+            kinkdef2=0.001,
         )
         is_kink = analyzer._identify_kinks(
-            path, other_as, other_bs, np.array([20.0, 20.0, 20.0]), use_pbc=False,
+            path,
+            other_as,
+            other_bs,
+            np.array([20.0, 20.0, 20.0]),
+            use_pbc=False,
         )
         assert is_kink[0]
         assert not is_kink[1]  # middle node is NOT a kink
@@ -202,11 +241,19 @@ class TestIdentifyKinks:
         other_as = np.array([[1.0, 0.0, -0.1]])
         other_bs = np.array([[1.0, 0.0, 0.1]])
         analyzer = EntanglementAnalyzer(
-            path, [(0, 3)], box=[10.0, 10.0, 10.0],
-            thickness_factor=1.0, kinkdef1=5.0, kinkdef2=0.001,
+            path,
+            [(0, 3)],
+            box=[10.0, 10.0, 10.0],
+            thickness_factor=1.0,
+            kinkdef1=5.0,
+            kinkdef2=0.001,
         )
         is_kink = analyzer._identify_kinks(
-            path, other_as, other_bs, np.array([10.0, 10.0, 10.0]), use_pbc=False,
+            path,
+            other_as,
+            other_bs,
+            np.array([10.0, 10.0, 10.0]),
+            use_pbc=False,
         )
         assert is_kink[0]
         assert not is_kink[1]  # straight segment, not a kink
@@ -223,7 +270,11 @@ class TestEliminateGhostNodes:
         empty = np.empty((0, 3), dtype=np.float64)
         analyzer = EntanglementAnalyzer(path, [(0, 3)], box=[10.0, 10.0, 10.0])
         new_path = analyzer._eliminate_ghost_nodes(
-            path, empty, empty, np.array([10.0, 10.0, 10.0]), use_pbc=False,
+            path,
+            empty,
+            empty,
+            np.array([10.0, 10.0, 10.0]),
+            use_pbc=False,
         )
         assert len(new_path) == 2
         np.testing.assert_array_almost_equal(new_path[0], [0.0, 0.0, 0.0])
@@ -237,7 +288,11 @@ class TestEliminateGhostNodes:
         other_bs = np.array([[0.5, 0.5, 1.0]])
         analyzer = EntanglementAnalyzer(path, [(0, 3)], box=[10.0, 10.0, 10.0])
         new_path = analyzer._eliminate_ghost_nodes(
-            path, other_as, other_bs, np.array([10.0, 10.0, 10.0]), use_pbc=False,
+            path,
+            other_as,
+            other_bs,
+            np.array([10.0, 10.0, 10.0]),
+            use_pbc=False,
         )
         assert len(new_path) == 3  # node retained
 
@@ -246,15 +301,22 @@ class TestEliminateGhostNodes:
 # End-to-end entanglement detection
 # =============================================================================
 
+
 class TestEndToEndEntanglement:
     """Full run() on synthetic systems with known topology."""
 
     def test_two_parallel_chains_no_entanglement(self):
         """Two parallel chains should have Z = 0."""
-        positions = np.array([
-            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0],  # chain 0
-            [0.0, 2.0, 0.0], [1.0, 2.0, 0.0], [2.0, 2.0, 0.0],  # chain 1
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],  # chain 0
+                [0.0, 2.0, 0.0],
+                [1.0, 2.0, 0.0],
+                [2.0, 2.0, 0.0],  # chain 1
+            ]
+        )
         boundaries = [(0, 3), (3, 6)]
         analyzer = EntanglementAnalyzer(positions, boundaries, box=[10.0, 10.0, 10.0])
         report = analyzer.run()
@@ -266,16 +328,26 @@ class TestEndToEndEntanglement:
         # Chain 0: slight z-bend so triangles are non-degenerate.
         # Chain 1: vertical at x=1 with a z-bend; its middle bead's triangle
         # is pierced by chain 0.
-        positions = np.array([
-            [0.0, 0.0, 0.0], [0.9, 0.0, 0.0], [2.0, 0.0, 0.5], [3.0, 0.0, 0.0],  # chain 0
-            [1.0, -1.0, 0.5], [1.0, 0.0, 0.0], [1.0, 1.0, 0.5],                 # chain 1
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.9, 0.0, 0.0],
+                [2.0, 0.0, 0.5],
+                [3.0, 0.0, 0.0],  # chain 0
+                [1.0, -1.0, 0.5],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.5],  # chain 1
+            ]
+        )
         boundaries = [(0, 4), (4, 7)]
         # Large thickness_factor so that kink detection is permissive for
         # this coarse synthetic geometry (real systems have much smaller
         # bond lengths where the default factor is appropriate).
         analyzer = EntanglementAnalyzer(
-            positions, boundaries, box=[10.0, 10.0, 10.0], thickness_factor=100.0,
+            positions,
+            boundaries,
+            box=[10.0, 10.0, 10.0],
+            thickness_factor=100.0,
         )
         report = analyzer.run()
         assert report.n_entangled >= 1
@@ -283,14 +355,26 @@ class TestEndToEndEntanglement:
 
     def test_three_chain_braid(self):
         """Three-chain braid: each chain is constrained by at least one other."""
-        positions = np.array([
-            [0.0, 0.0, 0.0], [0.9, 0.0, 0.0], [2.0, 0.0, 0.5], [3.0, 0.0, 0.0],  # chain 0
-            [1.0, -1.0, 0.5], [1.0, 0.0, 0.0], [1.0, 1.0, 0.5],                 # chain 1
-            [2.5, -1.0, 0.5], [2.5, 0.0, 0.0], [2.5, 1.0, 0.5],                 # chain 2
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.9, 0.0, 0.0],
+                [2.0, 0.0, 0.5],
+                [3.0, 0.0, 0.0],  # chain 0
+                [1.0, -1.0, 0.5],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.5],  # chain 1
+                [2.5, -1.0, 0.5],
+                [2.5, 0.0, 0.0],
+                [2.5, 1.0, 0.5],  # chain 2
+            ]
+        )
         boundaries = [(0, 4), (4, 7), (7, 10)]
         analyzer = EntanglementAnalyzer(
-            positions, boundaries, box=[10.0, 10.0, 10.0], thickness_factor=100.0,
+            positions,
+            boundaries,
+            box=[10.0, 10.0, 10.0],
+            thickness_factor=100.0,
         )
         report = analyzer.run()
         # Chain 0 should be entangled (constrained by chains 1 and/or 2)
@@ -298,9 +382,13 @@ class TestEndToEndEntanglement:
 
     def test_single_chain_always_z_zero(self):
         """A single chain cannot be entangled with itself (by default)."""
-        positions = np.array([
-            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0],
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+            ]
+        )
         boundaries = [(0, 3)]
         analyzer = EntanglementAnalyzer(positions, boundaries, box=[10.0, 10.0, 10.0])
         report = analyzer.run()
@@ -313,21 +401,28 @@ class TestEndToEndEntanglement:
         n_chains = 5
         beads_per_chain = 10
         positions = np.random.rand(n_chains * beads_per_chain, 3) * 5.0
-        boundaries = [(i * beads_per_chain, (i + 1) * beads_per_chain)
-                      for i in range(n_chains)]
+        boundaries = [(i * beads_per_chain, (i + 1) * beads_per_chain) for i in range(n_chains)]
         analyzer = EntanglementAnalyzer(positions, boundaries, box=[10.0, 10.0, 10.0])
         report = analyzer.run(max_iter=50)
         assert report.n_iter <= 50
 
     def test_report_structure(self):
         """EntanglementReport has correct shape and types."""
-        positions = np.array([
-            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0],
-            [0.0, 2.0, 0.0], [1.0, 2.0, 0.0], [2.0, 2.0, 0.0],
-        ])
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [1.0, 2.0, 0.0],
+                [2.0, 2.0, 0.0],
+            ]
+        )
         boundaries = [(0, 3), (3, 6)]
         analyzer = EntanglementAnalyzer(
-            positions, boundaries, box=[10.0, 10.0, 10.0],
+            positions,
+            boundaries,
+            box=[10.0, 10.0, 10.0],
             chain_names=["A", "B"],
         )
         report = analyzer.run()
@@ -347,7 +442,11 @@ class TestBatchPointToSegmentsDistSq:
         bond_bs = np.array([[2.0, 0.0, 0.0]])
         point = np.array([1.0, 0.0, 0.0])
         dist_sq = EntanglementAnalyzer._batch_point_to_segments_dist_sq(
-            point, bond_as, bond_bs, np.array([10.0, 10.0, 10.0]), use_pbc=False,
+            point,
+            bond_as,
+            bond_bs,
+            np.array([10.0, 10.0, 10.0]),
+            use_pbc=False,
         )
         assert dist_sq == pytest.approx(0.0, abs=1e-12)
 
@@ -357,7 +456,11 @@ class TestBatchPointToSegmentsDistSq:
         bond_bs = np.array([[2.0, 0.0, 0.0]])
         point = np.array([1.0, 1.0, 0.0])
         dist_sq = EntanglementAnalyzer._batch_point_to_segments_dist_sq(
-            point, bond_as, bond_bs, np.array([10.0, 10.0, 10.0]), use_pbc=False,
+            point,
+            bond_as,
+            bond_bs,
+            np.array([10.0, 10.0, 10.0]),
+            use_pbc=False,
         )
         assert dist_sq == pytest.approx(1.0, abs=1e-12)
 
@@ -365,6 +468,10 @@ class TestBatchPointToSegmentsDistSq:
         """Empty bond list → inf distance."""
         empty = np.empty((0, 3), dtype=np.float64)
         dist_sq = EntanglementAnalyzer._batch_point_to_segments_dist_sq(
-            np.zeros(3), empty, empty, np.array([10.0, 10.0, 10.0]), use_pbc=False,
+            np.zeros(3),
+            empty,
+            empty,
+            np.array([10.0, 10.0, 10.0]),
+            use_pbc=False,
         )
         assert np.isinf(dist_sq)

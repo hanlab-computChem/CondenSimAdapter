@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 
 import os
-import sys
 import mdtraj
-import pathlib
 import numpy as np
-import functools
 
 import dgl
 import torch
@@ -17,7 +14,6 @@ from .libdata import (
     create_trajectory_from_batch,
     create_topology_from_data,
 )
-from .residue_constants import read_coarse_grained_topology
 from . import libcg
 from .libpdb import write_SSBOND
 from .libter import patch_termini
@@ -97,7 +93,7 @@ def convert_cg2all(
                 error_msg += f"\nDownload error: {e}\n"
                 error_msg += "\nTo use backmapping, you need to either:\n"
                 error_msg += "1. Install huggingface_hub: pip install huggingface_hub\n"
-                error_msg += f"2. Manually download models from: https://huggingface.co/hanlab/condensimadapter-cg2all-models\n"
+                error_msg += "2. Manually download models from: https://huggingface.co/hanlab/condensimadapter-cg2all-models\n"
                 error_msg += f"3. Place models in: {MODEL_HOME}\n"
                 raise FileNotFoundError(error_msg)
     

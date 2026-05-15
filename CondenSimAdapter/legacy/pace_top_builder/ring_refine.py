@@ -174,20 +174,21 @@ ring_diagonal_dict = {
     }
 }
 
-import sys 
+import sys
+
 input_topology = sys.argv[1]
 
 class GromacsAtom:
     def __init__(self, input_string):
         parts = input_string.split()
         if len(parts) >= 8:
-            self.nr = int(parts[0])               
-            self.atom_type = parts[1]             
-            self.resnr = int(parts[2])            
-            self.residue = parts[3]               
-            self.atom_name = parts[4]             
-            self.charge = float(parts[6])         
-            self.mass = float(parts[7])           
+            self.nr = int(parts[0])
+            self.atom_type = parts[1]
+            self.resnr = int(parts[2])
+            self.residue = parts[3]
+            self.atom_name = parts[4]
+            self.charge = float(parts[6])
+            self.mass = float(parts[7])
         else:
             raise ValueError("Invalid input string format")
 
@@ -220,15 +221,15 @@ for rl in f:
         continue
     if rl.startswith('[ bonds'):
         atomFlag = False
-    if atomFlag:    
+    if atomFlag:
         atomlist.append(GromacsAtom(rl))
 f.close()
 
 
-# example for bond: 
-# atom1.nr atom2.nr 1 r_bond 125000 
-# example for dihedral: 
-# atom1.nr atom2.nr atom3.nr atom4.nr 1 theta_dihedral force_constant 1 
+# example for bond:
+# atom1.nr atom2.nr 1 r_bond 125000
+# example for dihedral:
+# atom1.nr atom2.nr atom3.nr atom4.nr 1 theta_dihedral force_constant 1
 
 def find_atom_by_name(atoms, residue_name, atom_name):
     """Find atom by residue name and atom name"""
@@ -240,12 +241,12 @@ def find_atom_by_name(atoms, residue_name, atom_name):
 def generate_ring_angles(atoms, residues, residue_names, force_constant):
     """Generate ring angle constraints for cyclic amino acids"""
     angles = []
-    
+
     for i, residue_name in enumerate(residue_names):
         if residue_name in ring_angle_dict:
             residue_atoms = residues[i]
             angle_data = ring_angle_dict[residue_name]
-            
+
             for angle_name, ideal_angle in angle_data.items():
                 atom_names = angle_name.split('-')
                 if len(atom_names) == 3:
@@ -256,23 +257,23 @@ def generate_ring_angles(atoms, residues, residue_names, force_constant):
                             atoms_found.append(atom)
                         else:
                             break
-                    
+
                     if len(atoms_found) == 3:
                         # Use GROMACS angle constraint format: atom1 atom2 atom3 1 theta force_constant
                         # Force constant typically set to 400 kJ/mol/rad^2
                         angles.append(f"{atoms_found[0].nr:5d} {atoms_found[1].nr:5d} {atoms_found[2].nr:5d} 1 {ideal_angle:8.2f} {force_constant:8.0f}")
-    
+
     return angles
 
 def generate_ring_dihedrals(atoms, residues, residue_names, force_constant):
     """Generate ring dihedral constraints for cyclic amino acids"""
     dihedrals = []
-    
+
     for i, residue_name in enumerate(residue_names):
         if residue_name in ring_dihedral_dict:
             residue_atoms = residues[i]
             dihedral_data = ring_dihedral_dict[residue_name]
-            
+
             for dihedral_name, angle in dihedral_data.items():
                 atom_names = dihedral_name.split('-')
                 if len(atom_names) == 4:
@@ -283,54 +284,54 @@ def generate_ring_dihedrals(atoms, residues, residue_names, force_constant):
                             atoms_found.append(atom)
                         else:
                             break
-                    
+
                     if len(atoms_found) == 4:
                         # Use GROMACS dihedral constraint format: atom1 atom2 atom3 atom4 1 angle force_constant 1
                         # Force constant typically set to 1000 kJ/mol
                         dihedrals.append(f"{atoms_found[0].nr:5d} {atoms_found[1].nr:5d} {atoms_found[2].nr:5d} {atoms_found[3].nr:5d} 1 {angle:8.1f} {force_constant:8.0f} 1")
-    
+
     return dihedrals
 
 def generate_ring_diagonals(atoms, residues, residue_names):
     """Generate diagonal distance constraints for cyclic amino acids (Type 10 Distance Restraints)
-    
+
     Used to maintain aromatic ring planar structure in United-Atom model:
     - Zero potential between low and up1, allowing natural thermal fluctuations
     - Penalty with force constant kdr after up1
     """
     diagonals = []
-    
+
     for i, residue_name in enumerate(residue_names):
         if residue_name in ring_diagonal_dict:
             residue_atoms = residues[i]
             diagonal_data = ring_diagonal_dict[residue_name]
-            
+
             for ring_type, diagonal_pairs in diagonal_data.items():
                 for (atom1_name, atom2_name), (low, up1, up2, kdr) in diagonal_pairs.items():
                     atom1 = find_atom_by_name(residue_atoms, residue_name, atom1_name)
                     atom2 = find_atom_by_name(residue_atoms, residue_name, atom2_name)
-                    
+
                     if atom1 and atom2:
                         # Use GROMACS Type 10 distance constraint format: atom1 atom2 10 low up1 up2 kdr
                         # funct=10 means Distance Restraints
                         diagonals.append(f"{atom1.nr:5d} {atom2.nr:5d} 10 {low:6.3f} {up1:6.3f} {up2:6.3f} {kdr:6.0f}")
-    
+
     return diagonals
 
 def get_itp_lines(angles, dihedrals, diagonals=None):
     """Write angle constraints, dihedral constraints, and diagonal distance constraints to itp file
-    
+
     diagonals: Diagonal distance constraint list (Type 10 Distance Restraints)
-    
+
     Control logic:
     - -DRINGREFINE: Controls angle and dihedral constraints
     - -DRINGREFINE_HEAVY: Controls diagonal distance constraints (Type 10 Distance Restraints)
     """
     if diagonals is None:
         diagonals = []
-    
+
     alllines = []
-    
+
     # Diagonal distance constraints - controlled by RINGREFINE_HEAVY
     if diagonals:
         alllines.append("#ifdef RINGREFINE_HEAVY")
@@ -346,7 +347,7 @@ def get_itp_lines(angles, dihedrals, diagonals=None):
             alllines.append(diagonal)
         alllines.append("#endif")
         alllines.append("")  # Empty line for separation
-    
+
     # Angle and dihedral constraints - controlled by RINGREFINE
     alllines.append("#ifdef RINGREFINE")
     alllines.append("; Ring angle and dihedral constraints for aromatic amino acids")
@@ -358,14 +359,14 @@ def get_itp_lines(angles, dihedrals, diagonals=None):
         alllines.append("; atom1 atom2 atom3 type angle force_constant")
         for angle in angles:
             alllines.append(angle)
-    
+
     if dihedrals:
         alllines.append("; Ring dihedrals")
         alllines.append("[ dihedrals ]")
         alllines.append("; atom1 atom2 atom3 atom4 type angle force_constant multiplicity")
         for dihedral in dihedrals:
             alllines.append(dihedral)
-        
+
     alllines.append("#endif")
     return alllines
 
@@ -373,7 +374,7 @@ def get_itp_lines(angles, dihedrals, diagonals=None):
 if __name__ == "__main__":
     # Parse atom information
     residues, residue_names = atoms_in_residue(atomlist, len(set(atom.resnr for atom in atomlist)))
-    
+
     # Generate ring constraints (angles, dihedrals, diagonal distance constraints)
     ring_angles = generate_ring_angles(atomlist, residues, residue_names, force_constant=400)
     ring_dihedrals = generate_ring_dihedrals(atomlist, residues, residue_names, force_constant=-50)
@@ -382,9 +383,9 @@ if __name__ == "__main__":
     alllines = get_itp_lines(ring_angles, ring_dihedrals, ring_diagonals)
 
     f = open(input_topology, 'r')
-    for rl in f: 
+    for rl in f:
         if rl.startswith('; Include Position'):
-            break 
+            break
         if rl.endswith('\n'):
             rl = rl[:-1]
         print (rl)

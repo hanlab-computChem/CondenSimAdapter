@@ -12,8 +12,6 @@ from .torch_basics import (
     v_size,
     inner_product,
     torsion_angle,
-    one_hot_encoding,
-    acos_safe,
 )
 from .residue_constants import (
     MAX_RESIDUE_TYPE,
@@ -519,7 +517,7 @@ class PRIMO(BaseClass):
                 for atom_name in self.WRITE_BEAD[:n_bead]:
                     serial += 1
                     element = mdtraj.core.element.Element.getBySymbol(atom_name[0])
-                    atom = top.add_atom(atom_name, element, residue, serial=serial)
+                    top.add_atom(atom_name, element, residue, serial=serial)
         return top
 
     def convert_to_cg(self, **kwarg):
@@ -582,7 +580,7 @@ class BackboneModel(BaseClass):
                 for atom_name in self.WRITE_BEAD:
                     serial += 1
                     element = mdtraj.core.element.Element.getBySymbol(atom_name[0])
-                    atom = top.add_atom(atom_name, element, residue, serial=serial)
+                    top.add_atom(atom_name, element, residue, serial=serial)
         return top
 
     def convert_to_cg(self, **kwarg):
@@ -659,7 +657,7 @@ def get_backbone_angles(R):
 
 def main():
     topology_map = read_coarse_grained_topology("martini3")
-    cg_model = Martini3("test/3pbl_A.pdb", is_all=True, topology_map=topology_map)
+    Martini3("test/3pbl_A.pdb", is_all=True, topology_map=topology_map)
 
 
 if __name__ == "__main__":

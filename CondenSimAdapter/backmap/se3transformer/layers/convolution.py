@@ -69,7 +69,7 @@ class ConvSE3FuseLevel(Enum):
 
 
 class RadialProfile(nn.Module):
-    """
+    r"""
     Radial profile function.
     Outputs weights used to weigh basis matrices in order to get convolution kernels.
     In TFN notation: $R^{l,k}$

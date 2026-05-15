@@ -8,16 +8,12 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-from pathlib import Path
-import yaml
-
 from CondenSimAdapter.minimize.minimizer import MinimizeConfig, MinimizeResult
-
 
 # =============================================================================
 # MinimizeConfig Tests
 # =============================================================================
+
 
 class TestMinimizeConfigDefaults:
     """Tests for MinimizeConfig default values."""
@@ -139,6 +135,7 @@ class TestMinimizeConfigCustomization:
 # =============================================================================
 # MinimizeResult Tests
 # =============================================================================
+
 
 class TestMinimizeResult:
     """Tests for MinimizeResult dataclass."""

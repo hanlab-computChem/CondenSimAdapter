@@ -8,11 +8,11 @@ Handles:
 
 from __future__ import annotations
 
-import numpy as np
-from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .config import Component, ComponentType, CGConfig, TopologyType
+import numpy as np
+
+from .config import CGConfig, ComponentType, TopologyType
 
 # Minimum safe distance (nm) between any compact-IDR atom and any folded-domain atom
 # when building the initial MDP chain coordinates.  Chosen to exceed typical WF sigma
@@ -24,6 +24,7 @@ _MIN_IDR_CLEARANCE = 0.55
 # ---------------------------------------------------------------------------
 # Single-chain coordinate generation
 # ---------------------------------------------------------------------------
+
 
 def build_idp_chain(
     n_beads: int,
@@ -67,22 +68,23 @@ def build_mdp_chain(
         coords: (N, 3) float64 array in nm, mass-centred at origin.
         sequence: one-letter amino acid string.
     """
+    from warnings import catch_warnings, simplefilter
+
     import MDAnalysis as mda
     from MDAnalysis.lib.util import convert_aa_code
-    from warnings import catch_warnings, simplefilter
 
     # Suppress MDAnalysis warnings (matches original CALVADOS behavior)
     with catch_warnings():
         simplefilter("ignore")
         u = mda.Universe(pdb_path)
-    
+
     residues = u.select_atoms("protein").residues
 
     coords = []
     seq = ""
     for res in residues:
         if use_com:
-            xyz = res.atoms.center_of_mass() / 10.0   # Å -> nm
+            xyz = res.atoms.center_of_mass() / 10.0  # Å -> nm
         else:
             ca = res.atoms.select_atoms("name CA")
             if len(ca) == 0:
@@ -95,7 +97,7 @@ def build_mdp_chain(
             seq += "G"
 
     coords = np.array(coords, dtype=np.float64)
-    coords -= coords.mean(axis=0)   # centre at origin
+    coords -= coords.mean(axis=0)  # centre at origin
     return coords, seq
 
 
@@ -174,7 +176,7 @@ def build_mdp_chain_compact_idr(
         # outward iteratively until every IDR atom is >= _MIN_IDR_CLEARANCE nm from
         # every folded-domain atom (like CALVADOS check_clash but for intra-chain).
         max_backward = (N / 2.0) * np.sqrt(3.0) * spacing
-        d_start = max_backward + spacing   # initial clearance guess
+        d_start = max_backward + spacing  # initial clearance guess
 
         idr_candidate = idr_c + (anchor + outward * d_start)
         for _ in range(200):
@@ -193,6 +195,7 @@ def build_mdp_chain_compact_idr(
 # ---------------------------------------------------------------------------
 # Multi-chain placement
 # ---------------------------------------------------------------------------
+
 
 def place_chains_grid(
     chain_coords: List[np.ndarray],
@@ -239,6 +242,7 @@ def place_chains_slab(
     """
     try:
         from MDAnalysis.analysis import distances as mda_dist
+
         _has_mda = True
     except ImportError:
         _has_mda = False
@@ -258,11 +262,13 @@ def place_chains_slab(
     for cidx, chain in enumerate(chain_coords):
         for ntry in range(max_tries):
             # Random translation within slab z-region (CALVADOS: draw_starting_vec)
-            trans = np.array([
-                rng.uniform(0.0, box[0]),
-                rng.uniform(0.0, box[1]),
-                rng.uniform(z_lo, z_hi),
-            ])
+            trans = np.array(
+                [
+                    rng.uniform(0.0, box[0]),
+                    rng.uniform(0.0, box[1]),
+                    rng.uniform(z_lo, z_hi),
+                ]
+            )
             candidate = chain + trans
 
             # z-boundary check: all atoms must stay within [0, Lz]
@@ -273,14 +279,14 @@ def place_chains_slab(
             # PBC-aware clash check against already-placed atoms (CALVADOS: check_clash)
             if placed:
                 xothers = np.vstack(placed).astype(np.float32)
-                cand_f  = candidate.astype(np.float32)
+                cand_f = candidate.astype(np.float32)
                 if _has_mda:
                     d = mda_dist.distance_array(cand_f, xothers, boxfull)
                 else:
                     # Fallback without MDAnalysis: naive PBC minimum-image distances
                     diff = cand_f[:, None, :] - xothers[None, :, :]
                     diff -= np.round(diff / boxfull[:3]) * boxfull[:3]
-                    d    = np.sqrt((diff ** 2).sum(axis=-1))
+                    d = np.sqrt((diff**2).sum(axis=-1))
                 if d.min() < clash_cutoff:
                     continue
 
@@ -312,6 +318,7 @@ def place_chains_random(
     """
     try:
         from MDAnalysis.analysis import distances as mda_dist
+
         _has_mda = True
     except ImportError:
         _has_mda = False
@@ -336,13 +343,13 @@ def place_chains_random(
             # PBC-aware clash check against already-placed atoms (CALVADOS: check_clash)
             if placed:
                 xothers = np.vstack(placed).astype(np.float32)
-                cand_f  = candidate.astype(np.float32)
+                cand_f = candidate.astype(np.float32)
                 if _has_mda:
                     d = mda_dist.distance_array(cand_f, xothers, boxfull)
                 else:
                     diff = cand_f[:, None, :] - xothers[None, :, :]
                     diff -= np.round(diff / boxfull[:3]) * boxfull[:3]
-                    d    = np.sqrt((diff ** 2).sum(axis=-1))
+                    d = np.sqrt((diff**2).sum(axis=-1))
                 if d.min() < clash_cutoff:
                     continue
 
@@ -362,6 +369,7 @@ def place_chains_random(
 # High-level builder
 # ---------------------------------------------------------------------------
 
+
 def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
     """
     Build all chains from a CGConfig.
@@ -377,7 +385,7 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
 
     # Determine if we should use COM mapping (CALVADOS3 only)
     use_com = config.resolved_force_field == "calvados3"
-    
+
     for comp in config.components:
         seq = comp.get_sequence()
         for _mol_idx in range(comp.nmol):
@@ -394,15 +402,17 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
             else:
                 coords = build_idp_chain(len(seq), method="compact")
             all_chains.append(coords)
-            chain_meta.append({
-                "name"          : comp.name,
-                "start"         : offset,
-                "end"           : offset + len(seq),
-                "sequence"      : seq,
-                "folded_domains": comp.folded_domains,
-                "comp_type"     : comp.comp_type,
-                "pdb_path"      : comp.pdb_path if comp.comp_type == ComponentType.MDP else None,
-            })
+            chain_meta.append(
+                {
+                    "name": comp.name,
+                    "start": offset,
+                    "end": offset + len(seq),
+                    "sequence": seq,
+                    "folded_domains": comp.folded_domains,
+                    "comp_type": comp.comp_type,
+                    "pdb_path": comp.pdb_path if comp.comp_type == ComponentType.MDP else None,
+                }
+            )
             offset += len(seq)
 
     # Assemble positions according to topology
@@ -436,6 +446,7 @@ def build_all_chains(config: CGConfig) -> Tuple[np.ndarray, List[dict]]:
 # Private helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_idr_segments(
     n_res: int,
     folded_domains: List[Tuple[int, int]],
@@ -463,7 +474,7 @@ def _build_spiral(n: int, d: float = 0.38) -> np.ndarray:
     coords = np.zeros((n, 3))
     for i in range(n):
         theta = np.sqrt(i / max(n, 1)) * 2.0 * np.pi
-        r     = d * np.sqrt(i)
+        r = d * np.sqrt(i)
         coords[i, 0] = r * np.cos(theta)
         coords[i, 1] = r * np.sin(theta)
     coords[:, 2] = np.linspace(-n * d / 2.0, n * d / 2.0, n)
@@ -514,7 +525,7 @@ def _build_xyzgrid(n: int, box: List[float]) -> np.ndarray:
     """
     3-D staggered grid of N points, scaled proportionally to the box dimensions.
     Mirrors the algorithm in CALVADOS build.build_xyzgrid with staggered offsets.
-    
+
     The staggered pattern:
     - Adjacent z-planes are offset by (dx/2, dy/2) in xy
     - Adjacent points within xy-plane have alternating z-offset (dz/2)
@@ -529,7 +540,7 @@ def _build_xyzgrid(n: int, box: List[float]) -> np.ndarray:
     a = np.cbrt(n / np.prod(r))
     n_float = a * r
     nxyz = np.maximum(np.floor(n_float), 1).astype(int)
-    
+
     # Adjust grid dimensions to fit all N points
     while np.prod(nxyz) < n:
         ndeviation = n_float / nxyz
@@ -575,7 +586,7 @@ def _build_xyzgrid(n: int, box: List[float]) -> np.ndarray:
         x += dx
 
         # Update xyplane based on position parity (alternating pattern)
-        if (ctx % 2 == cty % 2):
+        if ctx % 2 == cty % 2:
             xyplane = 1
         else:
             xyplane = -1

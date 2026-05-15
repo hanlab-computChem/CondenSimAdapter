@@ -4,13 +4,13 @@ import importlib
 import shutil
 from pathlib import Path
 
+import CondenSimAdapter.src.minimize as minimize_module
 from click.testing import CliRunner
 
 from CondenSimAdapter.cli.commands_refactored.forcefield_command import forcefield_command
 from CondenSimAdapter.cli.shared import validate_minimize_force_field
 from CondenSimAdapter.forcefield import registry as registry_module
 from CondenSimAdapter.forcefield.registry import ForceFieldRegistry
-import CondenSimAdapter.src.minimize as minimize_module
 
 
 def _sample_ff_dir() -> Path:
@@ -30,7 +30,9 @@ def _prepare_test_ff_dir(tmp_path) -> Path:
 
 def _prepare_isolated_registry(tmp_path, monkeypatch) -> ForceFieldRegistry:
     monkeypatch.setattr(registry_module, "CUSTOM_FORCEFIELD_DIR", tmp_path / "custom")
-    monkeypatch.setattr(registry_module, "CUSTOM_FORCEFIELD_INDEX", tmp_path / "user_forcefields.json")
+    monkeypatch.setattr(
+        registry_module, "CUSTOM_FORCEFIELD_INDEX", tmp_path / "user_forcefields.json"
+    )
     return ForceFieldRegistry()
 
 
@@ -84,7 +86,9 @@ def test_forcefield_cli_add_list_remove_and_validate_minimize(tmp_path, monkeypa
     registry = _prepare_isolated_registry(tmp_path, monkeypatch)
 
     # Patch CLI/shared to use isolated registry instance.
-    ff_cmd_module = importlib.import_module("CondenSimAdapter.cli.commands_refactored.forcefield_command")
+    ff_cmd_module = importlib.import_module(
+        "CondenSimAdapter.cli.commands_refactored.forcefield_command"
+    )
     from CondenSimAdapter.cli import shared as shared_module
 
     monkeypatch.setattr(ff_cmd_module, "REGISTRY", registry)

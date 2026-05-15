@@ -14,7 +14,7 @@ for rl in f:
     if rl.startswith("ATOM"):
         sprl = rl.split()
         resnum = sprl[5]
-        
+
         if resnum == '%d' % (int(last) - 1):
             if sprl[2] == "C":
                 print(f"DEBUG: Found C in res {resnum}: atom {sprl[1]}")
@@ -51,12 +51,12 @@ for rl in f:
 
     if ("dihedral" in rl) and change_N :
         change_C = True
-    
+
     if "; Include Position restraint file" in rl:
         change_C = False
 
     if "dihedral" in rl:
-        if change_N == False:
+        if not change_N:
             change_N = True
         else:
             change_N = False
